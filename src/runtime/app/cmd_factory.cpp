@@ -592,14 +592,6 @@ TurnRouting resolve_turn_routing(const Model& m) {
     r.subagents   = m.d.smart.subagent_routing();
     if (!r.orchestrate) return r;
 
-    // Layer 3a (orchestration): the MAIN turn runs on the Strategic role's
-    // (model, effort) so the flagship orchestrates and delegates grunt work.
-    // Needs the live catalog, so this is UI-thread work.
-    smart::RoleProfile prof =
-        smart::resolve_role(smart::ModelRole::Strategic, m.d.model_id.value,
-                            m.d.effort, m.d.available_models, m.d.smart,
-                            detail::active_provider_id());
-
     // The newest REAL user turn. Skips three things that can sit after it:
     // the zero-text 🧠 routing card (submit inserts it before the assistant
     // placeholder, so classifying it would score an empty string), a
@@ -635,6 +627,17 @@ TurnRouting resolve_turn_routing(const Model& m) {
     r.cx = smart::classify_turn(newest_user, m.s.smart_turn_complexity,
                                 nu_attach_bytes, nu_images,
                                 m.d.smart.complex_threshold);
+
+    // Layer 3a (orchestration): resolve the role the CLASSIFIER picks for this
+    // turn — no longer unconditionally Strategic. role_for_complexity spreads
+    // load so the cheap tiers absorb the ambient bulk and the flagship only
+    // fires on the genuinely-hard tail. Needs the live catalog (UI-thread).
+    const smart::ModelRole role = smart::role_for_complexity(r.cx.tier);
+    r.role = role;
+    smart::RoleProfile prof =
+        smart::resolve_role(role, m.d.model_id.value,
+                            m.d.effort, m.d.available_models, m.d.smart,
+                            detail::active_provider_id());
 
     // Session cascade bias only. The per-workspace learned prior, the regret
     // denominator it needed and the plan-recall few-shot all went with the

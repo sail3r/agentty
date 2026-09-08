@@ -345,6 +345,37 @@ namespace detail {
 // user pinned wins; otherwise the zero-config auto-fill applies. The resolver
 // NEVER routes a role UP past the parent tier for cost reasons; Strategic is
 // the parent (or a user-pinned stronger model).
+// ── Model-role routing by turn complexity (Pareto distribution) ─────────
+//
+// The main turn no longer runs UNCONDITIONALLY on the Strategic role. The
+// classifier ('scale effort to query complexity') already grades each turn;
+// here we let that grade ALSO pick the model, not merely the effort. The
+// intent is a Pareto spread of cost across the three tiers: the cheapest
+// capable model absorbs the ambient bulk of turns, and the scarce expensive
+// flagship is reserved for the small tail of genuinely hard work.
+//
+//   Trivial / Simple  → Utility        (cheapest capable, no think)   ~bulk
+//   Standard          → Implementation (capable mid working model)    ~middle
+//   Complex           → Strategic      (flagship, deepest think)      ~tail
+//
+// The classifier is conservative by construction (default = Standard, ties
+// break UPWARD — see complexity.cpp), so the flagship only ever fires on a
+// turn the heuristic is confident is hard; everything cheaper stays off it.
+// A mis-graded turn costs a little over/under-thinking, never a wrong model
+// with no tools: every chosen role still resolves through resolve_role,
+// which refuses non-dispatchable / no-tools assets and NEVER routes UP past
+// the parent tier, falling back to the parent model when no cheaper tier
+// exists. So a single-model / zero-config user sees no change at all.
+[[nodiscard]] constexpr ModelRole role_for_complexity(Complexity c) noexcept {
+    switch (c) {
+        case Complexity::Trivial:
+        case Complexity::Simple:   return ModelRole::Utility;
+        case Complexity::Standard: return ModelRole::Implementation;
+        case Complexity::Complex:  return ModelRole::Strategic;
+    }
+    return ModelRole::Strategic;
+}
+
 [[nodiscard]] inline RoleProfile resolve_role(
         ModelRole role,
         std::string_view parent_model,

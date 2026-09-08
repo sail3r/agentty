@@ -39,7 +39,8 @@ struct TurnRouting {
     // Empty model ⇒ orchestration is off and the plain selection serves the
     // turn; the card is not shown at all.
     bool                    orchestrate = false;
-    std::string             model;      // resolved Strategic model ("" = selection)
+    std::string             model;      // resolved role model ("" = selection)
+    smart::ModelRole        role = smart::ModelRole::Strategic; // chosen tier
     Effort                  base = Effort::None;     // BEFORE complexity scaling
     Effort                  effort = Effort::None;   // AFTER complexity scaling
     smart::ComplexityScore  cx{};       // the classification that scaled it
