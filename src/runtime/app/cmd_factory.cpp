@@ -627,6 +627,7 @@ TurnRouting resolve_turn_routing(const Model& m) {
     r.cx = smart::classify_turn(newest_user, m.s.smart_turn_complexity,
                                 nu_attach_bytes, nu_images,
                                 m.d.smart.complex_threshold);
+    r.enum_asks = r.cx.enum_asks;   // multi-part signal for delegated workers
 
     // Layer 3a (orchestration): resolve the role the CLASSIFIER picks for this
     // turn — no longer unconditionally Strategic. role_for_complexity spreads
@@ -882,7 +883,7 @@ Cmd<Msg> launch_stream(Model& m) {
         [thread = std::move(thread_snapshot),
          compacting, compaction_style, compaction_ceiling, context_max, retry_count,
          orchestrate, strategic_profile, turn_complexity,
-         role = routing.role,
+         role = routing.role, enum_asks = routing.enum_asks,
          session_key = std::move(session_key),
          model_id = std::move(model_id),
          compaction_model = std::move(compaction_model),
@@ -940,7 +941,15 @@ Cmd<Msg> launch_stream(Model& m) {
             // (delegation exists to spend a CHEAP model's context on mechanical
             // breadth, protecting the lead's expensive context for decisions).
             const char* budget =
-                turn_complexity == smart::Complexity::Trivial  ? "This turn is trivial — answer directly. Do NOT spawn any subagent; the delegation overhead exceeds the work."
+                // DETERMINISTIC multi-part trigger: an explicitly enumerated
+                // request (2+ line-leading list markers) IS decomposable by
+                // construction — the classifier's tier is irrelevant. This is
+                // the change that makes delegation a policy, not the model's
+                // discretion: regardless of the tier, a list-shaped request
+                // gets the parallel-worker budget.
+                enum_asks >= 2
+                  ? "This request is explicitly multi-part — spawn one worker per INDEPENDENT listed item in PARALLEL (don't run them serially), then synthesise their reports into one verified answer."
+              : turn_complexity == smart::Complexity::Trivial  ? "This turn is trivial — answer directly. Do NOT spawn any subagent; the delegation overhead exceeds the work."
               : turn_complexity == smart::Complexity::Simple   ? "This turn is simple — do it yourself, or use at most ONE explorer if you must read widely first. Spawning workers for a one-step task loses time and money."
               : turn_complexity == smart::Complexity::Complex   ? "This turn is complex — plan the decomposition first, then run SEVERAL workers in parallel for the INDEPENDENT sub-tasks (aim 3+), and synthesise their reports into one verified answer."
               : "Delegate the clearly-separable mechanical sub-tasks; keep every decision and the synthesis yourself.";

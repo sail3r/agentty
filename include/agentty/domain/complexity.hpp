@@ -68,6 +68,7 @@ struct ComplexityScore {
     Complexity tier   = Complexity::Standard;
     int        score  = 0;   // additive feature score
     int        margin = 0;   // distance to the nearest tier boundary
+    int        enum_asks = 0; // explicit multi-part count (line-leading list markers)
 };
 // The Complex cut is user-tunable, so it is a PARAMETER rather than a getenv()
 // read inside the classifier: a value read from the environment down here

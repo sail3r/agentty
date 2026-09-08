@@ -211,4 +211,20 @@ TEST_CASE("pareto_distribution") {
           "cost model must beat the all-flagship baseline by the Pareto margin");
     CHECK(t.tier[1] + t.tier[2] >= n / 2,
           "the middle tiers (Utility+Implementation) must carry the bulk");
+
+    // ── 5. Deterministic multi-part signal ────────────────────────────────
+    // The delegation trigger is enum_asks >= 2. The composed classifier must
+    // report a real count on an explicitly listed request (regardless of the
+    // tier it lands on), and 0 on a plain one — the prompt override keys off
+    // this, so it has to be reliable on the WIRE path (classify_turn), not
+    // just the raw scorer.
+    {
+        const std::string listed =
+            "Implement this feature.\n1. add the flag\n2. update the docs\n3. add a test";
+        const auto s = sm::classify_turn(listed, sm::Complexity::Simple, 0, 0);
+        CHECK(s.enum_asks >= 2, "enumerate_turn reports the multi-part count");
+        const auto plain = sm::classify_turn("fix the null check in auth.cpp",
+                                             sm::Complexity::Simple, 0, 0);
+        CHECK(plain.enum_asks == 0, "plain request reports no listed asks");
+    }
 }

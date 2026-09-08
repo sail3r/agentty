@@ -281,7 +281,7 @@ ComplexityScore classify_score(std::string_view text, int complex_min) noexcept 
         tier   = Complexity::Complex;
         margin = score - kComplexMin;
     }
-    return {tier, score, margin};
+    return {tier, score, margin, static_cast<int>(enumerated_asks(trimmed))};
 }
 
 Complexity classify_complexity(std::string_view text, int complex_min) noexcept {

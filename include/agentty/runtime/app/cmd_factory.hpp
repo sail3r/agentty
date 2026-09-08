@@ -44,6 +44,7 @@ struct TurnRouting {
     Effort                  base = Effort::None;     // BEFORE complexity scaling
     Effort                  effort = Effort::None;   // AFTER complexity scaling
     smart::ComplexityScore  cx{};       // the classification that scaled it
+    int                     enum_asks = 0;   // multi-part count from the classifier
     smart::ComplexityScore  cx_text{};  // text-only score, for lift provenance
     bool                    subagents = false;
 
