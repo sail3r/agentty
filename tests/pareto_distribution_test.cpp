@@ -149,13 +149,14 @@ TEST_CASE("pareto_distribution") {
           "Complex must route to Strategic (the expensive tail)");
 
     // ── 2. Tier resolution on the pinned ollama catalog ───────────────────
-    // UNKNOWN ids default to Mid (catalog.hpp tier_for), so "kimi-k3" reads
-    // as Mid — the resolver below still separates the three slots, but the
-    // FLAGSHIP lane is not recognising the id. Worth a catalog hint later.
-    CHECK(ModelCapabilities::tier_for("kimi-k3") == ModelCapabilities::Tier::Mid,
-          "kimi-k3 is an unknown id → Mid tier (documented limitation)");
+    // The kimi hint (catalog.hpp tier_for) recognises k3 as the flagship
+    // lane; k2.7 stays Mid, glm decodes Cheap via the 'flash' hint.
+    CHECK(ModelCapabilities::tier_for("kimi-k3") == ModelCapabilities::Tier::Flagship,
+          "kimi-k3 must decode to the flagship lane");
     CHECK(ModelCapabilities::tier_for("kimi-k2.7-code") == ModelCapabilities::Tier::Mid,
-          "kimi-k2.7-code → Mid tier");
+          "kimi-k2.7-code stays in the mid workhorse lane");
+    CHECK(ModelCapabilities::tier_for("kimi-k3-flash-lite") == ModelCapabilities::Tier::Cheap,
+          "cheap hint beats the kimi-flagship hint");
     CHECK(ModelCapabilities::tier_for("glm-5.3-flash") == ModelCapabilities::Tier::Cheap,
           "glm-5.3-flash must decode to the cheap lane");
 

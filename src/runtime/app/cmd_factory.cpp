@@ -841,7 +841,20 @@ Cmd<Msg> launch_stream(Model& m) {
     // empty string tells the view to fall back to it.
     if (!compacting && orchestrate && !strategic_profile.model.empty()) {
         m.s.smart_turn_model = strategic_profile.model;
-        m.s.smart_turn_role  = "strategic";
+        // Full-spelling role for the transcript accent table (turn.cpp's
+        // role_accent_for matches "strategic"/"implementation"/"utility" —
+        // smart::role_label's "impl" spelling would render unaccented). The
+        // Pareto router no longer guarantees the turn ran on Strategic, so
+        // label WHO actually served it.
+        const smart::ModelRole role = routing.role;
+        switch (role) {
+            case smart::ModelRole::Implementation:
+                m.s.smart_turn_role = "implementation"; break;
+            case smart::ModelRole::Utility:
+                m.s.smart_turn_role = "utility"; break;
+            default:
+                m.s.smart_turn_role = "strategic"; break;
+        }
     } else {
         m.s.smart_turn_model.clear();
         m.s.smart_turn_role.clear();
@@ -869,6 +882,7 @@ Cmd<Msg> launch_stream(Model& m) {
         [thread = std::move(thread_snapshot),
          compacting, compaction_style, compaction_ceiling, context_max, retry_count,
          orchestrate, strategic_profile, turn_complexity,
+         role = routing.role,
          session_key = std::move(session_key),
          model_id = std::move(model_id),
          compaction_model = std::move(compaction_model),
@@ -932,8 +946,10 @@ Cmd<Msg> launch_stream(Model& m) {
               : "Delegate the clearly-separable mechanical sub-tasks; keep every decision and the synthesis yourself.";
             req.system_prompt +=
                 "\n\n<smart-mode>\n"
-                "You are the STRATEGIC lead of a role-routed team. Your context "
-                "is the expensive resource: spend it on the high-value thinking "
+                + std::string{smart::role_label(role)} + " turn (model: "
+                + strategic_profile.model + "). "
+                "You are the lead of a role-routed team. Your context is the "
+                "expensive resource: spend it on the high-value thinking "
                 "— architecture, decisions, decomposition, review, synthesis — and "
                 "push bounded, well-specified MECHANICAL work (broad reading, "
                 "repro runs, mechanical edits) to cheaper workers via the `task` "

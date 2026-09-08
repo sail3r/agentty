@@ -504,6 +504,20 @@ struct ModelCapabilities {
             return false;
         };
         if (is_o_series()) return cheap_hint ? Tier::Cheap : Tier::Flagship;
+        // Moonshot Kimi: the k2.x line is the mid workhorse, k3+ is the
+        // flagship lane. Without this hint an unknown id ("kimi-k3") fell
+        // to the unknown-Mid default and the flagship lane never recognised
+        // it. A cheap hint still wins ("kimi-k3-flash-lite" → Cheap).
+        auto is_kimi_flagship = [&]() {
+            for (std::size_t i = 0; i + 1 < id.size(); ++i) {
+                const bool at_start = (i == 0) || id[i - 1] == '-' || id[i - 1] == '/';
+                if (at_start && (id[i] == 'k' || id[i] == 'K')
+                    && id[i + 1] == '3')
+                    return true;
+            }
+            return false;
+        };
+        if (is_kimi_flagship()) return cheap_hint ? Tier::Cheap : Tier::Flagship;
         if (cheap_hint) return Tier::Cheap;
         return base;
     }
