@@ -10,7 +10,7 @@ namespace agentty::ui {
 
 Element web_search_panel(const Model& m) {
     auto* o = m.ui.panel.get<pn::WebSearch>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
     // The scroll offset is the slot's own (pn::WebSearch::scroll), so it is
     // hashed with the panel and starts at the top every time it opens.
     return maya::Panel{form_config(o->form, info,

@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/status_bar.hpp>
+#include <maya/widget/agentty/status_bar.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

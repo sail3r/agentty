@@ -13,7 +13,7 @@
 #include "agentty/runtime/view/palette.hpp"
 #include "agentty/runtime/panel/fork.hpp"
 
-#include <maya/widget/panel.hpp>
+#include <maya/widget/agentty/panel.hpp>
 
 #include <string>
 
@@ -21,8 +21,6 @@ namespace pn = agentty::ui::panel;
 
 namespace agentty::ui {
 
-using namespace maya;
-using namespace maya::dsl;
 namespace fp = agentty::fork_panel;
 
 namespace {
@@ -48,7 +46,7 @@ struct RowSpec { const char* label; const char* help; };
 
 Element fork_panel(const Model& m) {
     const auto* o = m.ui.panel.get<pn::Fork>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     Panel::Config cfg;
     cfg.title      = " Fork thread ";
@@ -73,11 +71,9 @@ Element fork_panel(const Model& m) {
         cfg.items.push_back(std::move(row));
     }
 
-    cfg.footer.push_back(text(""));
-    cfg.footer.push_back(text(
-        "  A fork starts FRESH (near-zero context) · the old transcript is "
-        "readable on demand.",
-        fg_dim(muted)));
+    cfg.footer.push_back(maya::Line::blank());
+    cfg.footer.push_back(maya::Line{"  A fork starts FRESH (near-zero context) · the old transcript is "
+        "readable on demand.", fg_dim(muted)});
     // The shared key_hints idiom, not a hand-built run: this one spelled its
     // own spacing and could not shed keys under width pressure, so on a
     // narrow pane it overflowed instead of dropping the least important hint

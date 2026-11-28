@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/title_chip.hpp>
+#include <maya/widget/agentty/title_chip.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

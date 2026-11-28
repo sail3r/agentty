@@ -14,7 +14,7 @@
 #include "agtest.hpp"
 
 #include <functional>
-#include <maya/widget/reasoning.hpp>
+#include <maya/widget/agentty/reasoning.hpp>
 
 #include <cstdlib>   // setenv — the reveal tests pin the effect explicitly
 
@@ -26,7 +26,7 @@
 #include "agentty/runtime/view/composer.hpp"
 #include "agentty/runtime/view/status_bar/status_bar.hpp"
 
-#include <maya/widget/app_layout.hpp>
+#include <maya/widget/agentty/app_layout.hpp>
 #include <maya/render/canvas.hpp>
 #include <maya/render/renderer.hpp>
 #include <maya/core/anim_clock.hpp>

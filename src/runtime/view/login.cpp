@@ -30,351 +30,204 @@
 #include "agentty/runtime/login.hpp"
 #include "agentty/runtime/view/palette.hpp"
 
-#include <maya/widget/panel.hpp>
+#include <maya/widget/agentty/login_pane.hpp>
 
 namespace agentty::ui {
 
-using namespace maya;
-using namespace maya::dsl;
 // `login::` resolves to `agentty::ui::login::` from this scope without an
 // alias — and MSVC rejects an alias whose name shadows the existing
 // nested namespace, so don't write one.
 
 namespace {
 
-// Shared key-hint footer. Each sub-state passes the keys that are
-// meaningful in its context so the user always sees a complete map.
-// Wrapped so long footers reflow on narrow terminals.
-Element key_hints(std::initializer_list<std::pair<std::string, std::string>> hints) {
-    // Flatten into one TextElement with styled runs so the painter can
-    // wrap across rows on a narrow terminal. The previous hstack approach
-    // overflowed without ever wrapping.
-    std::string content;
-    std::vector<StyledRun> runs;
-    auto push_run = [&](std::string_view s, Style sty) {
-        if (s.empty()) return;
-        runs.push_back(StyledRun{
-            .byte_offset = content.size(),
-            .byte_length = s.size(),
-            .style       = sty,
-        });
-        content.append(s);
-    };
-    const Style key_sty = Style{}.with_fg(fg).with_bold();
-    const Style sep_sty = fg_dim(muted);
-    const Style val_sty = fg_dim(muted);
-    bool first = true;
-    for (const auto& [k, v] : hints) {
-        if (!first) push_run("   \xc2\xb7   ", sep_sty);   //   ·
-        first = false;
-        push_run(k, key_sty);
-        push_run(" ", sep_sty);
-        push_run(v, val_sty);
-    }
-    return Element{TextElement{
-        .content = std::move(content),
-        .style   = Style{}.with_fg(fg),
-        .wrap    = TextWrap::Wrap,
-        .runs    = std::move(runs),
-    }};
+using LP = maya::LoginPane;
+using Blocks = std::vector<LP::Block>;
+
+LP::Config base_config() {
+    LP::Config c;
+    c.accent    = accent;
+    c.text      = fg;
+    c.muted     = muted;
+    c.danger    = danger;
+    c.highlight = highlight;
+    c.code_path = code_path;
+    return c;
 }
 
-// Wrap-mode body text — long URLs / explanation lines reflow rather
-// than overflowing the modal.
-Element body_text(std::string_view content, Style sty) {
-    return Element{TextElement{
-        .content = std::string{content},
-        .style   = sty,
-        .wrap    = TextWrap::Wrap,
-    }};
-}
-
-// Bordered, wrap-mode "URL panel": the URL fills the modal width and
-// reflows across rows on narrow terminals, so the user can read every
-// character without horizontal scrolling. Background-styled so it
-// reads as a dedicated artifact (the thing to copy) rather than as
-// inline prose.
-Element url_panel(std::string_view url) {
-    auto url_text = Element{TextElement{
-        .content = std::string{url},
-        .style   = Style{}.with_fg(code_path),   // bright_cyan — "this is a path/identifier"
-        .wrap    = TextWrap::Wrap,
-    }};
-    return (v(url_text)
-            | padding(0, 1)
-            | border(BorderStyle::Round)
-            | bcolor(code_path)).build();
-}
-
-Element panel_picking(std::string_view provider,
-                      bool failed, std::string_view fail_msg) {
+Blocks picking_blocks(std::string_view provider, bool failed, std::string_view fail_msg) {
     // "Does this provider offer a CHOICE of auth method" is a registry
     // capability (method_menu), not a name — the reducer's gate reads the
     // same flag, so the view and the behaviour cannot drift.
     const auto* prow = provider::preset_for(provider);
     const bool anthropic_only = prow && prow->method_menu;
-    std::vector<Element> rows;
-    rows.push_back(text(anthropic_only
-                            ? "Add a " + std::string{prow->label} + " account"
-                            : std::string{"Sign in to agentty"},
-                        fg_bold(fg)));
-    rows.push_back(body_text(
-        anthropic_only
-            ? "Choose how to authenticate this new Anthropic account."
-            : "Bring your own model. Pick how you want to connect — you can "
-              "change this any time from the provider picker.",
-        fg_dim(muted)));
-    rows.push_back(text(""));
+    Blocks b;
+    b.push_back(LP::title(anthropic_only ? "Add a " + std::string{prow->label} + " account"
+                                         : std::string{"Sign in to agentty"}));
+    b.push_back(LP::prose(anthropic_only
+        ? "Choose how to authenticate this new Anthropic account."
+        : "Bring your own model. Pick how you want to connect — you can "
+          "change this any time from the provider picker."));
+    b.push_back(LP::gap());
     if (failed) {
-        // Wrap-mode danger toast so a long error message stays inside
-        // the modal instead of overflowing into the chrome.
-        rows.push_back(body_text(
-            std::string{"\xE2\x9A\xA0 "} + std::string{fail_msg},
-            fg_of(danger)));
-        rows.push_back(text(""));
+        b.push_back(LP::danger(std::string{"\xE2\x9A\xA0 "} + std::string{fail_msg}));
+        b.push_back(LP::gap());
     }
-    // Numbered items are flush-left to share the column with the header
-    // / description / hint rows. The title sits next to the number badge;
-    // the subtitle continuation indents by exactly the badge width ("1) "
-    // = 3 chars) so it visually hangs under the title, not under the number.
-    //
-    // API key is presented FIRST: it's the unambiguous, provider-neutral
-    // path (any Anthropic/OpenAI-family key), whereas subscription OAuth is
-    // a third-party-client path some users would rather avoid. Leading with
-    // the key keeps the un-controversial option one keystroke away.
-    rows.push_back(h(text("1) ", fg_bold(highlight)),
-                     text("Paste an API key", fg_bold(fg))).build());
-    rows.push_back(h(text("   ", fg_of(fg)),
-                     body_text("Anthropic sk-ant-…, or any provider's key",
-                               fg_dim(muted))).build());
-    rows.push_back(text(""));
-    rows.push_back(h(text("2) ", fg_bold(highlight)),
-                     text("OAuth via claude.ai", fg_bold(fg))).build());
-    rows.push_back(h(text("   ", fg_of(fg)),
-                     body_text("use your Claude Pro / Max subscription",
-                               fg_dim(muted))).build());
-    rows.push_back(text(""));
+    // API key FIRST: the unambiguous, provider-neutral path, whereas
+    // subscription OAuth is a third-party-client path some would rather avoid.
+    b.push_back(LP::option("1) ", "Paste an API key", "Anthropic sk-ant-…, or any provider's key"));
+    b.push_back(LP::gap());
+    b.push_back(LP::option("2) ", "OAuth via claude.ai", "use your Claude Pro / Max subscription"));
+    b.push_back(LP::gap());
     if (!anthropic_only) {
-        rows.push_back(h(text("3) ", fg_bold(highlight)),
-                         text("Sign in with ChatGPT", fg_bold(fg))).build());
-        rows.push_back(h(text("   ", fg_of(fg)),
-                         body_text("use your ChatGPT Plus / Pro (GPT-5 Codex)",
-                                   fg_dim(muted))).build());
-        rows.push_back(text(""));
-        rows.push_back(h(text("4) ", fg_bold(highlight)),
-                         text("Custom OpenAI-compatible host", fg_bold(fg)),
-                         text("  \xe2\x80\x94 llama.cpp, vLLM, LM Studio, Ollama",
-                                   fg_dim(muted))).build());
-        rows.push_back(text(""));
-        rows.push_back(h(text("5) ", fg_bold(highlight)),
-                         text("Sign in with GitHub Copilot", fg_bold(fg))).build());
-        rows.push_back(h(text("   ", fg_of(fg)),
-                         body_text("use your GitHub Copilot subscription",
-                                   fg_dim(muted))).build());
-        rows.push_back(text(""));
-        rows.push_back(h(text("6) ", fg_bold(highlight)),
-                         text("Sign in with Kimi", fg_bold(fg))).build());
-        rows.push_back(h(text("   ", fg_of(fg)),
-                         body_text("use your Kimi plan (K2 models)",
-                                   fg_dim(muted))).build());
-        rows.push_back(text(""));
+        b.push_back(LP::option("3) ", "Sign in with ChatGPT", "use your ChatGPT Plus / Pro (GPT-5 Codex)"));
+        b.push_back(LP::gap());
+        b.push_back(LP::option("4) ", "Custom OpenAI-compatible host", {},
+                               "  \xe2\x80\x94 llama.cpp, vLLM, LM Studio, Ollama"));
+        b.push_back(LP::gap());
+        b.push_back(LP::option("5) ", "Sign in with GitHub Copilot", "use your GitHub Copilot subscription"));
+        b.push_back(LP::gap());
+        b.push_back(LP::option("6) ", "Sign in with Kimi", "use your Kimi plan (K2 models)"));
+        b.push_back(LP::gap());
     }
-    rows.push_back(key_hints({{anthropic_only ? "1/2" : "1\xe2\x80\x93" "6", "choose"},
-                              {"Esc", "close"}}));
-    return v(std::move(rows)).build();
+    b.push_back(LP::hints({{anthropic_only ? "1/2" : "1\xe2\x80\x93" "6", "choose"}, {"Esc", "close"}}));
+    return b;
 }
 
-// One-item Panel for a single-field input state. The field is a REAL
-// panel item — Secret (count-only masking, the type-level can't-leak
-// guarantee) or Text (caret windowing, so a long paste scrolls under the
-// caret instead of walking off the edge). Prose rides as header lines;
-// Enter SUBMITS here, so the derived editing hint is overridden.
-Element input_panel(std::string title, std::vector<Element> prose,
-                    maya::PanelControl control, std::string note,
-                    std::string editing_note,
-                    std::vector<Element> footer = {}) {
+// One-item Panel for a single-field input state. The field is a REAL panel
+// item — Secret (count-only masking, the type-level can't-leak guarantee) or
+// Text (caret windowing). Prose rides above it; Enter SUBMITS here, so the
+// derived editing hint is overridden.
+LP::Config input_config(std::string title, Blocks prose, maya::PanelControl control,
+                        std::string note, std::string editing_note, Blocks footer = {}) {
+    LP::Config c = base_config();
     maya::Panel::Config cfg;
     cfg.title     = std::move(title);
     cfg.accent    = accent;
     cfg.min_width = 48;
     cfg.selected  = 0;
-    for (auto& p : prose) cfg.header.push_back(std::move(p));
-    cfg.header.push_back(text(""));
     maya::Panel::Item it;
     it.leading = "\xe2\x80\xba";                    // › — the prompt marker
     it.leading_style = fg_bold(accent);
     it.control = std::move(control);
-    // Prompt-style: the input hugs the › instead of right-aligning a
-    // screen-width away from it (this row has no label column to justify).
+    // Prompt-style: the input hugs the › (this row has no label column).
     it.value_primary = true;
     cfg.items.push_back(std::move(it));
-    cfg.footer       = std::move(footer);
     cfg.note         = std::move(note);
     cfg.editing_note = std::move(editing_note);
-    return maya::Panel{std::move(cfg)}.build();
+    c.panel = std::move(cfg);
+    prose.push_back(LP::gap());
+    c.panel_header = std::move(prose);
+    c.panel_footer = std::move(footer);
+    return c;
 }
 
-Element panel_oauth_code(const login::OAuthCode& s) {
-    std::vector<Element> prose;
-    prose.push_back(body_text(
-        "  Step 1 \xe2\x80\x94 open this URL and authorize agentty:",
-        fg_dim(muted)));
-    prose.push_back(text(""));
-    prose.push_back(url_panel(s.authorize_url));
-    prose.push_back(text(""));
-    prose.push_back(body_text(
-        "  Step 2 \xe2\x80\x94 paste the callback code below:",
-        fg_dim(muted)));
+LP::Config oauth_code(const login::OAuthCode& s) {
+    Blocks prose{LP::prose("  Step 1 \xe2\x80\x94 open this URL and authorize agentty:"),
+                 LP::gap(), LP::url(s.authorize_url), LP::gap(),
+                 LP::prose("  Step 2 \xe2\x80\x94 paste the callback code below:")};
     // The code is a credential in transit: Secret, count-only.
     maya::panel::Secret sec;
     sec.filled      = s.code_input.size();
     sec.caret       = std::min<std::size_t>(
         static_cast<std::size_t>(std::max(0, s.cursor)), s.code_input.size());
     sec.placeholder = "paste the code from claude.ai";
-    std::vector<Element> footer;
-    footer.push_back(text(""));
-    footer.push_back(key_hints({
-        {"c",   "copy URL"},
-        {"o",   "open browser"},
-        {"^Y",  "copy"},
-        {"^O",  "open"},
-    }));
-    return input_panel(" OAuth via claude.ai ", std::move(prose),
-                       std::move(sec),
-                       "\xe2\x86\xb5 submit code \xc2\xb7 esc cancel",
-                       "\xe2\x86\xb5 submit code \xc2\xb7 esc cancel",
-                       std::move(footer));
+    Blocks footer{LP::gap(), LP::hints({{"c", "copy URL"}, {"o", "open browser"},
+                                        {"^Y", "copy"}, {"^O", "open"}})};
+    return input_config(" OAuth via claude.ai ", std::move(prose), std::move(sec),
+                        "\xe2\x86\xb5 submit code \xc2\xb7 esc cancel",
+                        "\xe2\x86\xb5 submit code \xc2\xb7 esc cancel", std::move(footer));
 }
 
-Element panel_oauth_exchanging() {
-    std::vector<Element> rows;
-    rows.push_back(text("Exchanging authorization code\xE2\x80\xA6",   // …
-                        fg_bold(fg)));
-    rows.push_back(text(""));
-    rows.push_back(body_text(
-        "Talking to platform.claude.com — this should take a second.",
-        fg_dim(muted)));
-    rows.push_back(text(""));
-    rows.push_back(key_hints({{"Esc", "cancel"}}));
-    return v(std::move(rows)).build();
+Blocks oauth_exchanging() {
+    return {LP::title("Exchanging authorization code\xE2\x80\xA6"), LP::gap(),
+            LP::prose("Talking to platform.claude.com — this should take a second."),
+            LP::gap(), LP::hints({{"Esc", "cancel"}})};
 }
 
-Element panel_chatgpt_waiting(const login::ChatGptWaiting& s) {
-    std::vector<Element> rows;
+Blocks chatgpt_waiting(const login::ChatGptWaiting& s) {
+    Blocks b;
     if (s.device_auth) {
-        rows.push_back(text(s.user_code.empty()
-                                ? "Requesting ChatGPT device code\xE2\x80\xA6"
-                                : "Sign in to ChatGPT",
-                            fg_bold(fg)));
-        rows.push_back(text(""));
+        b.push_back(LP::title(s.user_code.empty() ? "Requesting ChatGPT device code\xE2\x80\xA6"
+                                                  : "Sign in to ChatGPT"));
+        b.push_back(LP::gap());
         if (s.user_code.empty()) {
-            rows.push_back(body_text(
-                "This SSH session uses device authorization. Waiting for "
-                "OpenAI to issue a one-time code\xE2\x80\xA6",
-                fg_dim(muted)));
+            b.push_back(LP::prose("This SSH session uses device authorization. Waiting for "
+                                  "OpenAI to issue a one-time code\xE2\x80\xA6"));
         } else {
-            rows.push_back(body_text(
-                "Open this link in a browser on any device:", fg_dim(muted)));
-            rows.push_back(text(""));
-            rows.push_back(url_panel(s.authorize_url));
-            rows.push_back(text(""));
-            rows.push_back(body_text("Then enter this one-time code:",
-                                     fg_dim(muted)));
-            rows.push_back(text(s.user_code, fg_bold(fg)));
-            rows.push_back(text(""));
-            rows.push_back(body_text(
-                "The code expires in 15 minutes. Continue only because you "
-                "started this login in agentty.", fg_dim(muted)));
+            b.push_back(LP::prose("Open this link in a browser on any device:"));
+            b.push_back(LP::gap());
+            b.push_back(LP::url(s.authorize_url));
+            b.push_back(LP::gap());
+            b.push_back(LP::prose("Then enter this one-time code:"));
+            b.push_back(LP::title(s.user_code));
+            b.push_back(LP::gap());
+            b.push_back(LP::prose("The code expires in 15 minutes. Continue only because you "
+                                  "started this login in agentty."));
         }
     } else {
-        rows.push_back(text("Waiting for ChatGPT\xE2\x80\xA6", fg_bold(fg)));
-        rows.push_back(text(""));
-        rows.push_back(body_text(
+        b.push_back(LP::title("Waiting for ChatGPT\xE2\x80\xA6"));
+        b.push_back(LP::gap());
+        b.push_back(LP::prose(
             "A browser tab has opened at chatgpt.com \xE2\x80\x94 authorize agentty "
             "there. The sign-in completes automatically over a local callback "
-            "(http://localhost:1455); you don't need to paste anything.",
-            fg_dim(muted)));
-        rows.push_back(text(""));
+            "(http://localhost:1455); you don't need to paste anything."));
+        b.push_back(LP::gap());
         if (!s.authorize_url.empty()) {
-            rows.push_back(body_text(
-                "Browser didn't open? Visit this URL manually:", fg_dim(muted)));
-            rows.push_back(text(""));
-            rows.push_back(url_panel(s.authorize_url));
-            rows.push_back(text(""));
+            b.push_back(LP::prose("Browser didn't open? Visit this URL manually:"));
+            b.push_back(LP::gap());
+            b.push_back(LP::url(s.authorize_url));
+            b.push_back(LP::gap());
         }
     }
-    rows.push_back(text(""));
-    rows.push_back(key_hints({{"Esc", "cancel"}}));
-    return v(std::move(rows)).build();
+    b.push_back(LP::gap());
+    b.push_back(LP::hints({{"Esc", "cancel"}}));
+    return b;
 }
 
-Element panel_device_waiting(const login::DeviceWaiting& s) {
-    const std::string label = s.provider_label.empty() ? "your provider"
-                                                       : s.provider_label;
-    std::vector<Element> rows;
-    rows.push_back(text(s.user_code.empty()
-                            ? "Requesting device code\xE2\x80\xA6"
-                            : "Sign in with " + label,
-                        fg_bold(fg)));
-    rows.push_back(text(""));
+Blocks device_waiting(const login::DeviceWaiting& s) {
+    const std::string label = s.provider_label.empty() ? "your provider" : s.provider_label;
+    Blocks b;
+    b.push_back(LP::title(s.user_code.empty() ? "Requesting device code\xE2\x80\xA6"
+                                              : "Sign in with " + label));
+    b.push_back(LP::gap());
     if (s.user_code.empty()) {
-        rows.push_back(body_text(
-            "Waiting for " + label + " to issue a one-time code\xE2\x80\xA6",
-            fg_dim(muted)));
-    } else {
-        rows.push_back(body_text(
-            "Open this URL to approve the device (it already includes your",
-            fg_dim(muted)));
-        rows.push_back(body_text(
-            "code). On SSH, press [u] to copy it, or scan/type it on any device:",
-            fg_dim(muted)));
-        rows.push_back(text(""));
-        rows.push_back(url_panel(s.authorize_url));
-        rows.push_back(text(""));
-        rows.push_back(h(text("   if the page asks for a code, enter: ", fg_dim(muted)),
-                         text(s.user_code, fg_bold(highlight))).build());
-        rows.push_back(text(""));
-        rows.push_back(body_text(
-            "After signing in to " + label + ", approve the device. The code "
-            "expires in ~15 minutes; no API key is needed.", fg_dim(muted)));
-        if (s.provider == "copilot") {
-            // GitHub shows this consent page as `GitHub Copilot Plugin`,
-            // not `Agentty`. That is deliberate and NOT replaceable: the
-            // token-exchange endpoint only accepts VS Code's GitHub App id
-            // (`Iv1.b507a08c87ecfe98`), AND the Copilot server keys its
-            // model allowlist to that id -- using a different App id would
-            // bounce the token exchange *or* return a stripped model list.
-            // See docs/design/copilot-provider.md section 2. Call it out
-            // explicitly so the user doesn't abort thinking they clicked
-            // the wrong link.
-            rows.push_back(text(""));
-            rows.push_back(body_text(
-                "Note: GitHub will label the app \"GitHub Copilot Plugin\" on "
-                "the consent page. That is expected \xe2\x80\x94 agentty signs "
-                "in as VS Code's Copilot client because the API's model "
-                "allowlist is keyed to that identity.",
-                fg_dim(muted)));
-        }
-        rows.push_back(text(""));
-        rows.push_back(key_hints({
-            {"c",   "copy code"},
-            {"u",   "copy URL"},
-            {"o",   "open browser"},
-            {"Esc", "cancel"},
-        }));
-        return v(std::move(rows)).build();
+        b.push_back(LP::prose("Waiting for " + label + " to issue a one-time code\xE2\x80\xA6"));
+        b.push_back(LP::gap());
+        b.push_back(LP::hints({{"Esc", "cancel"}}));
+        return b;
     }
-    rows.push_back(text(""));
-    rows.push_back(key_hints({{"Esc", "cancel"}}));
-    return v(std::move(rows)).build();
+    b.push_back(LP::prose("Open this URL to approve the device (it already includes your"));
+    b.push_back(LP::prose("code). On SSH, press [u] to copy it, or scan/type it on any device:"));
+    b.push_back(LP::gap());
+    b.push_back(LP::url(s.authorize_url));
+    b.push_back(LP::gap());
+    b.push_back(LP::code("   if the page asks for a code, enter: ", s.user_code));
+    b.push_back(LP::gap());
+    b.push_back(LP::prose("After signing in to " + label + ", approve the device. The code "
+                          "expires in ~15 minutes; no API key is needed."));
+    if (s.provider == "copilot") {
+        // GitHub labels this consent page "GitHub Copilot Plugin", not
+        // agentty: the token exchange only accepts VS Code's GitHub App id,
+        // and the model allowlist is keyed to it (docs/design/copilot-provider.md
+        // §2). Say so, so nobody aborts thinking they clicked the wrong link.
+        b.push_back(LP::gap());
+        b.push_back(LP::prose(
+            "Note: GitHub will label the app \"GitHub Copilot Plugin\" on "
+            "the consent page. That is expected \xe2\x80\x94 agentty signs "
+            "in as VS Code's Copilot client because the API's model "
+            "allowlist is keyed to that identity."));
+    }
+    b.push_back(LP::gap());
+    b.push_back(LP::hints({{"c", "copy code"}, {"u", "copy URL"},
+                           {"o", "open browser"}, {"Esc", "cancel"}}));
+    return b;
 }
 
-Element panel_api_key(const login::ApiKeyInput& s) {
+LP::Config api_key(const login::ApiKeyInput& s) {
     const bool anthropic = s.provider.empty();
     const bool custom = !anthropic && !provider::preset_for(s.provider);
     const bool optional = custom && !s.key_required;
-    std::vector<Element> prose;
-    prose.push_back(body_text(
+    Blocks prose{LP::prose(
         anthropic
             ? "  Paste an sk-ant-\xe2\x80\xa6 key. It's saved encrypted under "
               "~/.agentty/credentials."
@@ -386,8 +239,7 @@ Element panel_api_key(const login::ApiKeyInput& s) {
               "it's saved encrypted under ~/.agentty/credentials."
             : "  Paste your " + s.provider_label + " API key to switch to "
               "it. It's saved encrypted under ~/.agentty/credentials so you "
-              "won't be asked again.",
-        fg_dim(muted)));
+              "won't be asked again.")};
     // The KEY never reaches the widget — panel::Secret carries a count.
     maya::panel::Secret sec;
     sec.filled      = s.key_input.size();
@@ -400,30 +252,23 @@ Element panel_api_key(const login::ApiKeyInput& s) {
     const std::string enter = optional && s.key_input.empty()
         ? "\xe2\x86\xb5 continue without a key \xc2\xb7 "
         : "\xe2\x86\xb5 submit \xc2\xb7 ";
-    return input_panel(
+    return input_config(
         " " + (anthropic ? std::string{"Anthropic"} : s.provider_label) + " API key ",
         std::move(prose), std::move(sec), enter + back, enter + back);
 }
 
 // Connect probe in flight: name the host and what's being tried so the
 // short wait reads as WORK, not a hang. Esc cancels back to the input.
-Element panel_host_probing(const login::HostProbing& s) {
-    std::vector<Element> rows;
-    rows.push_back(text("Checking " + s.spec + "\xe2\x80\xa6", fg_bold(fg)));
-    rows.push_back(text(""));
-    rows.push_back(body_text(
-        "Dialing the server's model list \xe2\x80\x94 the configured path, "
-        "then /v1/models, then Ollama's /api/tags \xe2\x80\x94 to detect what "
-        "it speaks and confirm it's alive before switching.",
-        fg_dim(muted)));
-    rows.push_back(text(""));
-    rows.push_back(key_hints({{"Esc", "cancel"}}));
-    return v(std::move(rows)).build();
+Blocks host_probing(const login::HostProbing& s) {
+    return {LP::title("Checking " + s.spec + "\xe2\x80\xa6"), LP::gap(),
+            LP::prose("Dialing the server's model list \xe2\x80\x94 the configured path, "
+                      "then /v1/models, then Ollama's /api/tags \xe2\x80\x94 to detect what "
+                      "it speaks and confirm it's alive before switching."),
+            LP::gap(), LP::hints({{"Esc", "cancel"}})};
 }
 
-Element panel_custom_host(const login::CustomHostInput& s) {
-    std::vector<Element> prose;
-    prose.push_back(body_text(
+LP::Config custom_host(const login::CustomHostInput& s) {
+    Blocks prose{LP::prose(
         "  Enter a host or host:port for any server that speaks the OpenAI "
         "chat API \xe2\x80\x94 llama.cpp, vLLM, LM Studio, a proxy, or a "
         "remote box. A non-443 port uses plain HTTP (the local-server "
@@ -432,8 +277,7 @@ Element panel_custom_host(const login::CustomHostInput& s) {
         "full URL (https://host/path) and the prefix is honoured verbatim. "
         "Append #name to keep several accounts on the SAME endpoint "
         "(e.g. \xe2\x80\xa6/v1#work and \xe2\x80\xa6/v1#personal \xe2\x80\x94 "
-        "each keeps its own API key and model).",
-        fg_dim(muted)));
+        "each keeps its own API key and model).")};
     // Text, not Secret — a host is not a credential, and the caret
     // windowing means a long pasted URL scrolls under the caret.
     maya::panel::Text t;
@@ -442,13 +286,10 @@ Element panel_custom_host(const login::CustomHostInput& s) {
         static_cast<std::size_t>(std::max(0, s.cursor)), s.host_input.size());
     t.placeholder = "localhost:8080";
     const char* back = login::has_parent(s.origin) ? "esc back" : "esc cancel";
-    std::vector<Element> footer;
-    footer.push_back(text(""));
-    footer.push_back(body_text(
+    Blocks footer{LP::gap(), LP::prose(
         "  Examples:  localhost:8080  \xc2\xb7  https://ollama.com/v1#work  "
-        "\xc2\xb7  inference.example.com  \xc2\xb7  https://inference.example.com/api",
-        fg_dim(muted)));
-    return input_panel(
+        "\xc2\xb7  inference.example.com  \xc2\xb7  https://inference.example.com/api")};
+    return input_config(
         " Custom OpenAI-compatible host ", std::move(prose), std::move(t),
         std::string{"\xe2\x86\xb5 connect \xc2\xb7 "} + back,
         std::string{"\xe2\x86\xb5 connect \xc2\xb7 "} + back,
@@ -456,37 +297,27 @@ Element panel_custom_host(const login::CustomHostInput& s) {
 }
 
 // The account switcher, as a real maya::Panel — the same widget every
-// picker uses, so the account list gets the panel's cursor bar, badge
-// column, viewport scrolling and mode chrome instead of a hand-rolled
-// inverse-video list (which the panel merge removed everywhere else).
-//
-// Item mapping:
-//   badge   ✓ on the ACTIVE account (accent) — ⚠ while delete is armed
-//   leading label ("#work", "personal…")
-//   trailing"press d again to confirm" while armed — SECONDARY, so the
-//           label survives narrow terminals
+// picker uses: cursor bar, badge column, viewport scrolling.
+//   badge    ✓ on the ACTIVE account — ⚠ while delete is armed
+//   trailing "press d again to confirm" while armed — SECONDARY, so the
+//            label survives narrow terminals
 //   + Add another account… rides as the last item, dim until selected
-Element panel_account_list(const login::AccountList& s,
-                           maya::ScrollState* scroll,
-                           std::string_view active_error) {
+LP::Config account_list(const login::AccountList& s, maya::ScrollState* scroll,
+                        std::string_view active_error) {
+    LP::Config c = base_config();
     maya::Panel::Config cfg;
     cfg.title     = " " + s.provider_label + " accounts ";
     cfg.accent    = accent;
     cfg.min_width = 48;
-    // Scroll like every list panel: many accounts on one provider must
-    // window inside the modal, not grow it past the terminal edge.
+    // Scroll like every list panel: many accounts must window inside the
+    // modal, not grow it past the terminal edge.
     cfg.scroll     = scroll;
     cfg.viewport_h = agentty::ui_prefs::panel_rows();   // Density, like every panel
     const int n = static_cast<int>(s.rows.size());
     cfg.selected  = std::min(s.cursor, n);   // last item = add-new
-
-    if (s.rows.empty()) {
-        cfg.header.push_back(body_text(
-            "  No saved accounts. Add one to sign in without leaving agentty.",
-            fg_dim(muted)));
-        cfg.header.push_back(text(""));
-    }
-
+    if (s.rows.empty())
+        c.panel_header = {LP::prose("  No saved accounts. Add one to sign in without leaving agentty."),
+                          LP::gap()};
     for (const auto& r : s.rows) {
         maya::Panel::Item it;
         const bool confirming = (s.confirm_remove == r.label);
@@ -501,7 +332,7 @@ Element panel_account_list(const login::AccountList& s,
         } else if (r.active && !active_error.empty()) {
             // The host refused this key on the last request: say so here,
             // where the user can add a working one.
-            it.badge         = "\xe2\x9a\xa0";           // ⚠
+            it.badge         = "\xe2\x9a\xa0";
             it.badge_style   = fg_of(warn);
             it.leading_style = fg_bold(warn);
             it.trailing       = "rejected by the host";
@@ -522,38 +353,38 @@ Element panel_account_list(const login::AccountList& s,
         add.leading_style = fg_dim(muted);
         cfg.items.push_back(std::move(add));
     }
-
     cfg.note = s.confirm_remove.empty()
                    ? "\xe2\x86\x91\xe2\x86\x93 move \xc2\xb7 \xe2\x86\xb5 select \xc2\xb7 d remove \xc2\xb7 esc close"
                    : "d confirm remove \xc2\xb7 any other key cancels";
-    return maya::Panel{std::move(cfg)}.build();
+    c.panel = std::move(cfg);
+    return c;
 }
 
 } // namespace
 
-Element login_modal(const Model& m) {
-    if (!login::is_open(m.ui.login)) return nothing();
-
-    Element body = std::visit([&m](const auto& s) -> Element {
+maya::Element login_modal(const Model& m) {
+    if (!login::is_open(m.ui.login)) return LP::empty();
+    LP::Config cfg = std::visit([&m](const auto& s) -> LP::Config {
         using T = std::decay_t<decltype(s)>;
+        auto prose = [](Blocks b) { LP::Config c = base_config(); c.blocks = std::move(b); return c; };
         if constexpr (std::same_as<T, login::Closed>) {
-            return nothing();
+            return base_config();
         } else if constexpr (std::same_as<T, login::Picking>) {
-            return panel_picking(s.provider, false, "");
+            return prose(picking_blocks(s.provider, false, ""));
         } else if constexpr (std::same_as<T, login::OAuthCode>) {
-            return panel_oauth_code(s);
+            return oauth_code(s);
         } else if constexpr (std::same_as<T, login::OAuthExchanging>) {
-            return panel_oauth_exchanging();
+            return prose(oauth_exchanging());
         } else if constexpr (std::same_as<T, login::ChatGptWaiting>) {
-            return panel_chatgpt_waiting(s);
+            return prose(chatgpt_waiting(s));
         } else if constexpr (std::same_as<T, login::DeviceWaiting>) {
-            return panel_device_waiting(s);
+            return prose(device_waiting(s));
         } else if constexpr (std::same_as<T, login::ApiKeyInput>) {
-            return panel_api_key(s);
+            return api_key(s);
         } else if constexpr (std::same_as<T, login::CustomHostInput>) {
-            return panel_custom_host(s);
+            return custom_host(s);
         } else if constexpr (std::same_as<T, login::HostProbing>) {
-            return panel_host_probing(s);
+            return prose(host_probing(s));
         } else if constexpr (std::same_as<T, login::AccountList>) {
             // The active provider's last fetch said its key was refused.
             std::string_view key_err;
@@ -566,38 +397,12 @@ Element login_modal(const Model& m) {
                                                       : std::string{});
             if (auth_err && !active_id.empty() && s.provider == active_id)
                 key_err = m.s.models_error;
-            return panel_account_list(s, &m.ui.account_list_scroll, key_err);
+            return account_list(s, &m.ui.account_list_scroll, key_err);
         } else if constexpr (std::same_as<T, login::Failed>) {
-            return panel_picking("", true, s.message);
+            return prose(picking_blocks("", true, s.message));
         }
     }, m.ui.login);
-
-    // Panel-BUILT states (the inputs, the account list) draw their own
-    // frame, title and note line — wrapping them again would nest two
-    // borders. Only the hand-built prose states (picking, the waiting
-    // spinners, failure) still get the generic "Sign in" frame.
-    const bool self_framed =
-        std::holds_alternative<login::OAuthCode>(m.ui.login)
-        || std::holds_alternative<login::ApiKeyInput>(m.ui.login)
-        || std::holds_alternative<login::CustomHostInput>(m.ui.login)
-        || std::holds_alternative<login::AccountList>(m.ui.login);
-    if (self_framed) return body;
-
-    // Responsive sizing: `min_width` floors the modal at a readable
-    // width on tiny terminals; the Overlay's default Stretch lets it
-    // grow to fill all available columns on wider terminals (minus the
-    // Overlay's 2-col edge padding). No max cap — every text node uses
-    // TextWrap::Wrap, so URLs and prose reflow naturally to whatever
-    // width the terminal gives us. Capping at 96 cols left ~50 cols of
-    // empty terminal on a typical 150-col window.
-    return vstack()
-        .padding(1, 2)
-        .min_width(Dimension::fixed(48))
-        .border(BorderStyle::Round)
-        .border_color(accent)
-        .border_text(" Sign in to agentty ",
-                     BorderTextPos::Top, BorderTextAlign::Center)
-        (std::move(body));
+    return maya::LoginPane{std::move(cfg)}.build();
 }
 
 } // namespace agentty::ui

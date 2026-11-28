@@ -33,6 +33,19 @@
 
 Details: [docs/website/building.md](docs/website/building.md).
 
+## UI lives in maya, never in agentty
+
+- agentty only fills widget Configs from the Model. Every pixel is drawn by a
+  maya widget in `third_party/maya/include/maya/widget/agentty/`. No
+  `Element{}`, `dsl::`, `text(`/`h(`/`v(`, `| border(` pipes or
+  `using namespace maya` anywhere under `src/` or `include/agentty/`.
+- Need something drawn that no widget offers? Add or extend the widget in
+  maya; panel rows are `maya::Line`s, CLI output is `maya::report`.
+- `ctest -R no_ui_in_agentty` enforces it (no allowlist), and
+  `ctest -R ui_snapshots` pins every screen byte-for-byte; update the
+  snapshots with `tests/ui_snapshots.sh build/tool_gallery --update` only
+  when a look changes on purpose. Details: [docs/UI.md](docs/UI.md).
+
 ## Tool performance
 
 shell, edit, read, grep and write are ~92% of all tool calls, and every one

@@ -4,7 +4,7 @@
 #include <string>
 #include <unordered_map>
 
-#include <maya/widget/tool_body_preview.hpp>
+#include <maya/widget/agentty/tool_body_preview.hpp>
 #include "agentty/domain/conversation.hpp"
 
 namespace agentty::ui {

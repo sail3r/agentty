@@ -10,7 +10,7 @@
 // eats the repaint (login inputs, both forms, the rag probe verdict, the
 // result-card scroll — each found by hand, each fixed by hand).
 //
-// THE INVERSION. mix_any(h, state) derives the hash FROM THE TYPE:
+// THE INVERSION. mix_any(mix, state) derives the hash FROM THE TYPE:
 //
 //   • scalars/enums/bools    → mixed directly
 //   • strings                → FNV over the bytes + length
@@ -154,7 +154,7 @@ inline constexpr bool parts_cover_all =
 // H is any callable taking std::uint64_t (the accumulating mixer).
 
 template <class H, class T>
-constexpr void mix_any(H&& h, const T& v);
+constexpr void mix_any(H&& mix, const T& v);
 
 namespace detail {
 // P1061's pack structured binding (`auto&& [... xs] = v;`) used to live
@@ -189,10 +189,10 @@ constexpr void mix_decomposed(H&&, const T&, std::integral_constant<std::size_t,
 }
 #define AGENTTY_VISUAL_MIX_RUNG(n, ...)                                        \
     template <class H, class T>                                                \
-    constexpr void mix_decomposed(H&& h, const T& v,                           \
+    constexpr void mix_decomposed(H&& mix, const T& v,                         \
                                   std::integral_constant<std::size_t, n>) {    \
         auto& [__VA_ARGS__] = v;                                               \
-        std::apply([&](const auto&... xs) { (mix_any(h, xs), ...); },          \
+        std::apply([&](const auto&... xs) { (mix_any(mix, xs), ...); },          \
                    std::forward_as_tuple(__VA_ARGS__));                        \
     }
 AGENTTY_VISUAL_MIX_RUNG(1,  m0)
@@ -228,27 +228,27 @@ inline constexpr bool is_ref<Ref<T>> = true;
 } // namespace detail
 
 template <class H, class T>
-constexpr void mix_any(H&& h, const T& v) {
+constexpr void mix_any(H&& mix, const T& v) {
     using U = std::remove_cvref_t<T>;
     if constexpr (std::is_same_v<U, Exempt>) {
         // accounted for, contributes nothing
     } else if constexpr (detail::is_ref<U>) {
-        mix_any(h, *v.p);
+        mix_any(mix, *v.p);
     } else if constexpr (HasParts<U>) {
         static_assert(parts_cover_all<U>,
                       "visual_parts(T) must account for every base and "
                       "member of T (use visual::exempt for non-visual ones)");
-        std::apply([&](const auto&... parts) { (mix_any(h, parts), ...); },
+        std::apply([&](const auto&... parts) { (mix_any(mix, parts), ...); },
                    visual_parts(v));
     } else if constexpr (std::is_same_v<U, bool>) {
-        h(v ? 2ull : 1ull);
+        mix(v ? 2ull : 1ull);
     } else if constexpr (std::is_enum_v<U>) {
-        h(static_cast<std::uint64_t>(static_cast<std::int64_t>(v)) + 0x9e37ull);
+        mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(v)) + 0x9e37ull);
     } else if constexpr (std::is_floating_point_v<U>) {
         // Quantized: sub-1/8192 wiggle is invisible at cell resolution.
-        h(static_cast<std::uint64_t>(static_cast<std::int64_t>(v * 8192.0)));
+        mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(v * 8192.0)));
     } else if constexpr (std::is_arithmetic_v<U>) {
-        h(static_cast<std::uint64_t>(static_cast<std::int64_t>(v)));
+        mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(v)));
     } else if constexpr (std::is_convertible_v<const U&, std::string_view>) {
         const std::string_view s{v};
         std::uint64_t fnv = 1469598103934665603ull;
@@ -256,33 +256,33 @@ constexpr void mix_any(H&& h, const T& v) {
             fnv ^= c;
             fnv *= 1099511628211ull;
         }
-        h(fnv);
-        h(s.size());
+        mix(fnv);
+        mix(s.size());
     } else if constexpr (requires {
                              v.index();
                              std::visit([](const auto&) {}, v);
                          }) {
-        h(static_cast<std::uint64_t>(v.index()) + 0x51ull);
-        std::visit([&](const auto& alt) { mix_any(h, alt); }, v);
+        mix(static_cast<std::uint64_t>(v.index()) + 0x51ull);
+        std::visit([&](const auto& alt) { mix_any(mix, alt); }, v);
     } else if constexpr (requires {
                              v.has_value();
                              *v;
                          }) {
-        h(v.has_value() ? 2ull : 1ull);
-        if (v.has_value()) mix_any(h, *v);
+        mix(v.has_value() ? 2ull : 1ull);
+        if (v.has_value()) mix_any(mix, *v);
     } else if constexpr (requires {
                              v.begin();
                              v.end();
                              v.size();
                          }) {
-        h(static_cast<std::uint64_t>(v.size()) + 0xC0ull);
-        for (const auto& e : v) mix_any(h, e);
+        mix(static_cast<std::uint64_t>(v.size()) + 0xC0ull);
+        for (const auto& e : v) mix_any(mix, e);
     } else {
         static_assert(arity<T> <= 12,
                       "aggregate with more than 12 members hit the visual hash "
                       "walk: extend the mix_decomposed ladder in this header, "
                       "or declare visual_parts(T) for the type");
-        detail::mix_decomposed(h, v,
+        detail::mix_decomposed(mix, v,
                                std::integral_constant<std::size_t, arity<T>>{});
     }
 }

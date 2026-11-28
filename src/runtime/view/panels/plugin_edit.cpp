@@ -11,7 +11,7 @@ namespace agentty::ui {
 
 Element plugin_edit_panel(const Model& m) {
     auto* o = m.ui.panel.get<pn::PluginEdit>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
     return maya::Panel{form_config(o->form, info,
                                   &m.ui.plugin_edit_scroll,
                                   panel_viewport_h(),

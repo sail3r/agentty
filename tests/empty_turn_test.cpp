@@ -34,7 +34,7 @@
 #include "agtest.hpp"
 
 #include <maya/print.hpp>            // render_to_string
-#include <maya/widget/turn.hpp>
+#include <maya/widget/agentty/turn.hpp>
 
 #include "agentty/runtime/app/update.hpp"
 #include "agentty/runtime/model.hpp"

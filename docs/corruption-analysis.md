@@ -149,8 +149,8 @@ scrollback↔viewport seam mismatch.
 
 - `src/runtime/app/update/stream.cpp` (StreamError arm, ~line 749 onwards)
 - `src/runtime/view/thread/turn/turn.cpp:44-83` (`cached_markdown_for`)
-- `third_party/maya/src/widget/markdown.cpp:4785-4815` (`StreamingMarkdown::set_content`)
-- `third_party/maya/src/widget/markdown.cpp:4840-4870` (`StreamingMarkdown::clear`)
+- `third_party/maya/src/widget/agentty/markdown.cpp:4785-4815` (`StreamingMarkdown::set_content`)
+- `third_party/maya/src/widget/agentty/markdown.cpp:4840-4870` (`StreamingMarkdown::clear`)
 
 **The hot path**
 
@@ -544,7 +544,7 @@ Fix is three-pronged:
 
 **Files**
 
-- `third_party/maya/src/widget/markdown/streaming.cpp` — `set_content_async`,
+- `third_party/maya/src/widget/agentty/markdown/streaming.cpp` — `set_content_async`,
   `finish`, `maybe_apply_async_`.
 
 **Reachability in agentty's host flow.** The async path is only

@@ -14,8 +14,8 @@
 #include <maya/render/canvas.hpp>
 #include <maya/render/renderer.hpp>
 #include <maya/style/theme.hpp>
-#include <maya/widget/context_gauge.hpp>
-#include <maya/widget/status_bar.hpp>
+#include <maya/widget/agentty/context_gauge.hpp>
+#include <maya/widget/agentty/status_bar.hpp>
 
 #include <chrono>
 #include <cstdio>

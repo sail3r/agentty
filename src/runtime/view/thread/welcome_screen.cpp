@@ -1,7 +1,7 @@
 #include "agentty/runtime/view/thread/welcome_screen.hpp"
 
 #include <maya/core/render_context.hpp>
-#include <maya/widget/model_badge.hpp>
+#include <maya/widget/agentty/model_badge.hpp>
 
 #include "agentty/domain/model_name.hpp"
 #include "agentty/runtime/view/helpers.hpp"

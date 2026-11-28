@@ -20,8 +20,8 @@
 #include "agentty/runtime/panel/settings/items.hpp"
 #include "agentty/runtime/fuzzy.hpp"   // search hit highlight
 
-#include <maya/widget/panel.hpp>
-#include <maya/widget/panel/caret.hpp>
+#include <maya/widget/agentty/panel.hpp>
+#include <maya/widget/agentty/panel/caret.hpp>
 
 #include <algorithm>
 #include <string>
@@ -30,8 +30,6 @@ namespace pn = agentty::ui::panel;
 
 namespace agentty::ui {
 
-using namespace maya;
-using namespace maya::dsl;
 namespace se = agentty::settings;
 
 namespace {
@@ -96,7 +94,7 @@ const char* add_prompt(se::Category c) {
 
 Element settings_list_panel(const Model& m) {
     const auto* o = m.ui.panel.get<pn::SettingsList>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     const bool adding = o->input_active;
     auto rows = se::items_for(m, o->concern);
@@ -127,9 +125,7 @@ Element settings_list_panel(const Model& m) {
         // AT o->cursor (←/→ work mid-string), and a long pasted command
         // line windows under it (‹/› markers) instead of walking off the
         // right edge — same machinery as every panel text field.
-        cfg.header.push_back(h(
-            text("  "), text(add_prompt(o->concern), fg_dim(muted))
-        ).build());
+        cfg.header.push_back(maya::Line{{"  "}, {add_prompt(o->concern), fg_dim(muted)}});
         std::size_t at = std::string::npos;
         const std::string shown = maya::panel::detail::with_caret(
             o->input, static_cast<std::size_t>(std::max(0, o->cursor)),
@@ -138,12 +134,11 @@ Element settings_list_panel(const Model& m) {
         // cursor on a blank cell, coloured via OSC 12.
         const auto caret = Style{}.with_fg(highlight).with_conceal()
                                   .with_caret_anchor().with_caret_shape(1);
-        cfg.header.push_back(h(
-            text("  \xe2\x9c\x8e  ", fg_of(highlight)),         // ✎ pencil
-            text(shown.substr(0, at), fg_bold(fg)),
-            text(shown.substr(at, 3), caret),
-            text(shown.substr(at + 3), fg_bold(fg))
-        ).build());
+        cfg.header.push_back(Line{
+            {"  \xe2\x9c\x8e  ", fg_of(highlight)},         // ✎ pencil
+            {shown.substr(0, at), fg_bold(fg)},
+            {shown.substr(at, 3), caret},
+            {shown.substr(at + 3), fg_bold(fg)}});
     } else if (o->concern == se::Category::General) {
         // The hub searches every setting: the filter line is the header.
         cfg.header.push_back(filter_header(o->query, "every setting", highlight));
@@ -181,8 +176,8 @@ Element settings_list_panel(const Model& m) {
         if (pm.cap.deferred > 0)
             line2 += " \xc2\xb7 " + std::to_string(pm.cap.deferred)
                    + " deferred (addressable by name)";
-        cfg.header.push_back(h(text("  "), text(line1, fg_bold(fg))).build());
-        cfg.header.push_back(h(text("  "), text(line2, fg_dim(muted))).build());
+        cfg.header.push_back(maya::Line{{"  "}, {line1, fg_bold(fg)}});
+        cfg.header.push_back(maya::Line{{"  "}, {line2, fg_dim(muted)}});
         // Enabled but not on the wire, in two sentences because there are two
         // reasons: the cap (the user can fix it by pinning) and a schema the
         // request would fail on (only the server can fix it).
@@ -196,21 +191,18 @@ Element settings_list_panel(const Model& m) {
                 left += std::to_string(pm.cap.skipped_by_schema)
                       + " left out by an invalid schema";
             }
-            cfg.header.push_back(h(text("  "), text(left, fg_of(warn))).build());
+            cfg.header.push_back(maya::Line{{"  "}, {left, fg_of(warn)}});
         }
     } else {
-        cfg.header.push_back(h(
-            text("  "), text(se::subtitle(o->concern), fg_dim(muted))
-        ).build());
+        cfg.header.push_back(maya::Line{{"  "}, {se::subtitle(o->concern), fg_dim(muted)}});
     }
-    cfg.header.push_back(text(""));
+    cfg.header.push_back(maya::Line::blank());
 
     // ── Search results (hub with a query) ─────────────────────────────
     if (se::is_search(*o)) {
         const auto hits = se::search(o->index_rows, o->query);
         if (hits.empty()) {
-            cfg.prebuilt.push_back(text(
-                "  no setting matches \"" + o->query + "\"", fg_italic(muted)));
+            cfg.prebuilt.push_back(maya::Line{"  no setting matches \"" + o->query + "\"", fg_italic(muted)});
         }
         for (int k = 0; k < static_cast<int>(hits.size()); ++k) {
             const auto& hit = o->index_rows[static_cast<std::size_t>(hits[static_cast<std::size_t>(k)])];
@@ -237,11 +229,10 @@ Element settings_list_panel(const Model& m) {
             cfg.items.push_back(std::move(row));
         }
         cfg.selected = hits.empty() ? -1 : o->index;
-        cfg.footer.push_back(text(""));
+        cfg.footer.push_back(maya::Line::blank());
         if (!hits.empty())
-            cfg.footer.push_back(text(
-                "  " + std::to_string(o->index + 1) + "/" + std::to_string(hits.size())
-                    + " settings", fg_dim(muted)));
+            cfg.footer.push_back(maya::Line{"  " + std::to_string(o->index + 1) + "/" + std::to_string(hits.size())
+                    + " settings", fg_dim(muted)});
         cfg.footer.push_back(key_hints({{"\xe2\x86\x91\xe2\x86\x93", "move", 5},
                                         {"\xe2\x86\xb5", "open", 5},
                                         {"esc", "clear", 5}}));
@@ -338,16 +329,13 @@ Element settings_list_panel(const Model& m) {
     } else if (!o->confirm_remove.empty()) {
         cfg.note = "d confirm remove \xc2\xb7 any other key cancels";
     } else {
-        cfg.footer.push_back(text(""));
+        cfg.footer.push_back(maya::Line::blank());
         // Action hint for the focused row, then keys (+ `a add`).
         std::string act_hint;
         if (o->index >= 0 && o->index < static_cast<int>(rows.size()))
             act_hint = rows[static_cast<std::size_t>(o->index)].hint;
         if (!act_hint.empty())
-            cfg.footer.push_back(h(
-                text("  \xe2\x86\xb5 ", fg_of(highlight)),
-                text(act_hint, fg_of(fg))
-            ).build());
+            cfg.footer.push_back(maya::Line{{"  \xe2\x86\xb5 ", fg_of(highlight)}, {act_hint, fg_of(fg)}});
 
         // The shared key_hints idiom (hints.hpp), not hand-built runs —
         // every other picker's footer goes through it, and the drift this

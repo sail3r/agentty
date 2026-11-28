@@ -25,7 +25,7 @@
 
 #include <maya/core/anim_clock.hpp>
 #include <maya/print.hpp>
-#include <maya/widget/reasoning.hpp>
+#include <maya/widget/agentty/reasoning.hpp>
 
 #include <algorithm>
 #include <string>

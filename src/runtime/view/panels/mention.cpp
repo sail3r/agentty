@@ -9,7 +9,7 @@ namespace agentty::ui {
 
 Element mention_panel(const Model& m) {
     auto* o = m.ui.panel.get<pn::Mention>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     // One memoised filter pass shared with the reducer — reading it here
     // also tops up a cold-opened snapshot, so a picker that was arrowed
@@ -31,19 +31,17 @@ Element mention_panel(const Model& m) {
     // knowing before you start typing.
     cfg.header.push_back(
         filter_header(o->picker.query(), "(changed files first)", info, "@ "));
-    cfg.header.push_back(sep);
+    cfg.header.push_back(maya::Line::rule());
 
     if (files.empty()) {
         // Distinguish "still indexing" from "genuinely empty" — the walk
         // runs on a background thread; if it hasn't landed the picker
         // opened with an empty snapshot. source_ready() tells them apart.
-        cfg.prebuilt.push_back(text(
-            o->picker.source_ready()
+        cfg.prebuilt.push_back(maya::Line{o->picker.source_ready()
                 ? "  workspace empty (or no readable files)"
-                : "  indexing workspace… (type to filter as it fills)",
-            fg_italic(muted)));
+                : "  indexing workspace… (type to filter as it fills)", fg_italic(muted)});
     } else if (matches.empty()) {
-        cfg.prebuilt.push_back(text("  no matches", fg_italic(muted)));
+        cfg.prebuilt.push_back(maya::Line{"  no matches", fg_italic(muted)});
     } else {
         cfg.items.reserve(matches.size());
         for (int i = 0; i < static_cast<int>(matches.size()); ++i) {
@@ -81,10 +79,8 @@ Element mention_panel(const Model& m) {
     // Position indicator: still useful as a textual N/total anchor even
     // though the scrollbar shows the same thing visually.
     if (static_cast<int>(matches.size()) > kViewportH) {
-        cfg.footer.push_back(text(
-            "  " + std::to_string(o->picker.index() + 1) + "/"
-                + std::to_string(matches.size()),
-            fg_dim(muted)));
+        cfg.footer.push_back(maya::Line{"  " + std::to_string(o->picker.index() + 1) + "/"
+                + std::to_string(matches.size()), fg_dim(muted)});
     }
 
     // Enter/Esc/arrows all work here (on_mention_palette) but were never

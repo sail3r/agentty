@@ -7,7 +7,6 @@
 
 #include <maya/style/color.hpp>
 #include <maya/style/style.hpp>
-#include <maya/dsl.hpp>
 #include <maya/terminal/ansi.hpp>
 
 #include "agentty/domain/ui_live.hpp"   // thinking pref
@@ -267,35 +266,6 @@ void bake_context_window(ModelInfo& row,
 [[nodiscard]] bool model_order_less(std::string_view a,
                                     std::string_view b) noexcept;
 
-// Hardware-caret cell for an overlay's live search input (command
-// palette / model picker / fused picker query lines). One concealed
-// █ whose style carries the caret_anchor meta-bit: maya's inline
-// serializer moves the REAL terminal cursor onto it and shows it as a
-// blinking bar — so the caret travels with focus (composer → palette →
-// back) instead of vanishing whenever an overlay opens. IME candidate
-// windows anchor in the search field too. Append it directly after
-// the query text. `accent` colors the caret via OSC 12 (Rgb only;
-// ignored elsewhere — harmless).
-// Bottom-most-anchor-wins in the serializer, and the composer stops
-// emitting its anchor while any overlay is open (panel::top gate in
-// composer_config), so exactly one anchor exists per frame.
-//
-// Shape 1 (BLINKING block) is deliberate and unconditional: a search
-// field is an idle text input, so its caret blinks exactly like the
-// composer's idle caret — same everywhere, including under tmux, and
-// regardless of the terminal's own default cursor style. The blink is
-// the TERMINAL's (DECSCUSR), so it costs zero animation frames. No
-// tmux special-case: the epilogue parks at the right margin and resets
-// cosmetics, so tmux's copy-mode cursor lands on blank padding rather
-// than mid-content (see maya's emit_caret_epilogue). One code path,
-// one look, everywhere.
-[[nodiscard]] inline auto query_caret(maya::Color tint) {
-    return maya::dsl::text("\xe2\x96\x88",
-                           maya::Style{}
-                               .with_conceal()
-                               .with_caret_anchor()
-                               .with_caret_shape(1)   // blinking block
-                               .with_fg(tint));
-}
+// The search-field caret is maya::query_caret (widget/agentty/key_hints.hpp).
 
 } // namespace agentty::ui

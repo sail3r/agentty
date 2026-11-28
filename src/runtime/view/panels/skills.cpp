@@ -37,7 +37,7 @@ namespace agentty::ui {
 
 Element skills_panel(const Model& m) {
     auto* o = m.ui.panel.get<pn::Skills>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     Panel::Config cfg;
     cfg.title      = " Skills ";
@@ -52,11 +52,8 @@ Element skills_panel(const Model& m) {
     // is loaded — the healthy case needs no sentence.
     if (o->incomplete()) {
         for (const auto& p : tools::skills::catalog_problems(o->catalog))
-            cfg.header.push_back(h(
-                text("  "),
-                text(p.what, p.warn ? fg_of(warn) : fg_of(fg)),
-                text("  " + p.fix, fg_dim(muted))).build());
-        cfg.header.push_back(text(""));
+            cfg.header.push_back(maya::Line{{"  "}, {p.what, p.warn ? fg_of(warn) : fg_of(fg)}, {"  " + p.fix, fg_dim(muted)}});
+        cfg.header.push_back(maya::Line::blank());
     }
 
     // The list budget is set at the END, once the header AND the detail
@@ -73,7 +70,7 @@ Element skills_panel(const Model& m) {
     // The list answers "what is installed"; the footer answers "what is
     // THIS one", so the user never has to leave the panel to find out why a
     // row is marked.
-    cfg.footer.push_back(text(""));
+    cfg.footer.push_back(maya::Line::blank());
 
     // A footer line with a hanging margin.
     //
@@ -85,16 +82,16 @@ Element skills_panel(const Model& m) {
     // cell: the second cell wraps inside its column and the remainder stays
     // under the text it belongs to.
     const auto note = [&cfg](std::string content, Style sty) {
-        cfg.footer.push_back(h(text("  "), text(std::move(content), sty)).build());
+        cfg.footer.push_back(maya::Line{{"  "}, {std::move(content), sty}});
     };
 
     // Blank spacer rows, remembered so they can yield to content when the
     // terminal is too short (see the budget below). Breathing room is the
     // first thing a cramped panel should lose — never the detail itself.
     std::vector<std::size_t> spacers;
-    const auto blank = [&cfg, &spacers] {
+    const auto spacer_row = [&cfg, &spacers] {
         spacers.push_back(cfg.footer.size());
-        cfg.footer.push_back(text(""));
+        cfg.footer.push_back(maya::Line::blank());
     };
 
     if (const auto* sel = o->selected()) {
@@ -103,7 +100,7 @@ Element skills_panel(const Model& m) {
             // own chrome. (A description that can open a new line can
             // impersonate the headings around it.)
             note(sel->description, fg_dim(muted));
-            blank();
+            spacer_row();
         }
 
         // Provenance. "you wrote this" vs "this arrived from elsewhere" is
@@ -121,7 +118,7 @@ Element skills_panel(const Model& m) {
         // A name collision hides a whole skill, so it is said plainly and
         // before the findings — the user cannot discover it any other way.
         if (sel->shadow_conflict) {
-            blank();
+            spacer_row();
             note("another skill in this scope declares the same name.", fg_of(danger));
             note("one of them is not loaded \xe2\x80\x94 agentty skill list",
                  fg_dim(muted));
@@ -130,8 +127,8 @@ Element skills_panel(const Model& m) {
         // What screening saw. Capped at four lines: a footer nobody can
         // read is a footer nobody reads, and the CLI shows the full set.
         if (!sel->findings.empty()) {
-            blank();
-            cfg.footer.push_back(text("  agentty noticed:", fg_of(fg)));
+            spacer_row();
+            cfg.footer.push_back(maya::Line{"  agentty noticed:", fg_of(fg)});
 
             int shown = 0;
             for (const auto& f : sel->findings) {
@@ -155,9 +152,7 @@ Element skills_panel(const Model& m) {
                 // a wide glyph (an em dash) the gap can come out one column
                 // short — that is maya's width table, not this layout.
                 const Style sty = crit ? fg_of(danger) : fg_of(warn);
-                cfg.footer.push_back(
-                    h(text(prefix, sty, TextWrap::NoWrap),
-                      (text(f.detail, sty) | padding(0, 0, 0, 2))).build());
+                cfg.footer.push_back(Line::hanging(prefix, f.detail, sty));
             }
             if (sel->findings.size() > 4)
                 note("\xe2\x80\xa6 " + std::to_string(sel->findings.size() - 4) +
@@ -166,7 +161,7 @@ Element skills_panel(const Model& m) {
 
             // The honest caveat, every time findings are shown. Without it
             // an empty findings list reads as a clean bill of health.
-            blank();
+            spacer_row();
             note("pattern matching, not proof \xe2\x80\x94 and no findings"
                  " is not a clean bill.",
                  fg_dim(muted));
@@ -175,7 +170,7 @@ Element skills_panel(const Model& m) {
         // The action, named but not bound. Saying WHERE the decision lives
         // is more useful than a key that makes it too easy.
         if (sel->gated && !sel->trusted) {
-            blank();
+            spacer_row();
             note("not approved \xe2\x80\x94 the agent cannot load it.", fg_of(warn));
             note("review and approve:  agentty skill approve " + sel->name,
                  fg_dim(muted));
@@ -189,7 +184,7 @@ Element skills_panel(const Model& m) {
     // Summary line: the headline count, only when there is something to
     // count. Silence is the right output for a healthy set.
     if (flagged || pending) {
-        blank();
+        spacer_row();
         std::string sum = "  ";
         if (flagged)
             sum += std::to_string(flagged)
@@ -197,8 +192,7 @@ Element skills_panel(const Model& m) {
         if (flagged && pending) sum += ", ";
         if (pending)
             sum += std::to_string(pending) + " awaiting approval";
-        cfg.footer.push_back(text(std::move(sum),
-                                  flagged ? fg_of(danger) : fg_of(warn)));
+        cfg.footer.push_back(maya::Line{std::move(sum), flagged ? fg_of(danger) : fg_of(warn)});
     }
 
     cfg.footer.push_back(key_hints({

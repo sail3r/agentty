@@ -178,7 +178,7 @@ namespace {
 
 maya::Element sandbox_panel(const Model& m) {
     auto* o = m.ui.panel.get<ui::panel::Sandbox>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     // The form is rebuilt by the reducer, but the report is a VIEW concern:
     // it is derived, it is only ever read here, and threading it through the
@@ -238,7 +238,7 @@ maya::Element sandbox_panel(const Model& m) {
 
 maya::Element sandbox_list_panel(const Model& m) {
     auto* o = m.ui.panel.get<ui::panel::SandboxList>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     auto form = o->pane.form;
 

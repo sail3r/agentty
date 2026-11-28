@@ -7,13 +7,12 @@
 
 #include <maya/anim/text_reveal.hpp>   // the transcript's typewriter
 #include <maya/core/animation.hpp>   // RateCursor
-#include <maya/widget/spinner.hpp>      // the transcript's spinner frames
+#include <maya/widget/agentty/spinner.hpp>      // the transcript's spinner frames
 #include <maya/core/anim_clock.hpp>
 #include <maya/core/motion.hpp>      // keep_animating
-#include <maya/element/text.hpp>          // decode_utf8
 #include <maya/text/unicode_width.hpp>   // char_width
-#include <maya/widget/tool_body_preview.hpp>
-#include <maya/widget/scrollbar.hpp>   // the body's scrollbar
+#include <maya/widget/agentty/tool_body_preview.hpp>
+#include <maya/widget/agentty/tool_viewer.hpp>
 
 #include <cmath>    // lround: tok/s
 #include <format>
@@ -142,7 +141,7 @@ std::string fit_cols(std::string_view s, int w) {
 
 Element tool_output_panel(const Model& m) {
     const auto* o = m.ui.panel.get<pn::ToolOutput>();
-    if (!o) return nothing();
+    if (!o) return Panel::empty();
 
     const int sz = static_cast<int>(o->entries.size());
     const int cur = std::clamp(o->index, 0, std::max(0, sz - 1));
@@ -238,7 +237,7 @@ Element tool_output_panel(const Model& m) {
             cfg.items.push_back(std::move(row));
         }
         if (!compact_list) {
-            cfg.footer.push_back(text(""));
+            cfg.footer.push_back(Line::blank());
             std::vector<Hint> list_hints{
                 {"\xe2\x86\x91\xe2\x86\x93", "move", 5},   // ↑↓
                 {"Enter", "view", 6},
@@ -252,22 +251,8 @@ Element tool_output_panel(const Model& m) {
             cfg.footer.push_back(key_hints(std::move(list_hints)));
         }
         // Same rule as the body: never taller than the room the overlay has.
-        const int budget = std::max(3, list_term_rows - 2);
-        const int cols   = std::max(10, panel_terminal_cols() - 4);
-        Element out;
-        for (int pass = 0; pass < 8; ++pass) {
-            Panel::Config c = cfg;
-            out = Panel{std::move(c)}.build();
-            const int h = maya::measure_element(out, cols).height.value;
-            if (h <= budget) break;
-            const int over = h - budget;
-            if (cfg.viewport_h > 3) cfg.viewport_h = std::max(3, cfg.viewport_h - over);
-            else if (!cfg.tight) cfg.tight = true;
-            else if (!cfg.footer.empty()) cfg.footer.clear();
-            else if (cfg.viewport_h > 1) cfg.viewport_h = std::max(1, cfg.viewport_h - over);
-            else break;
-        }
-        return out;
+        return Panel::fit(std::move(cfg), std::max(3, list_term_rows - 2),
+                          std::max(10, panel_terminal_cols() - 4));
     }
 
     // ── BODY stage ──
@@ -339,6 +324,7 @@ Element tool_output_panel(const Model& m) {
     // Header: tool name, what it ran on, and how it went. The status never
     // clips; the detail gives way first. Thinking has no "ran on": its
     // header is the turn and the size.
+    std::optional<maya::ToolViewer::Header> viewer_header;
     if (!compact_body) {
         std::string detail = e.thinking ? std::string{} : e.detail;
         std::string trailing = e.trailing;
@@ -368,27 +354,7 @@ Element tool_output_panel(const Model& m) {
         const Style head_st  = e.thinking && !thinking_live ? fg_bold(success) : fg_bold(tool_hue);
         const Style trail_st = e.failed ? fg_of(danger)
                              : thinking_live ? fg_of(role_brand) : fg_dim(muted);
-        // Built at the row's real width, so the facts that fit are chosen
-        // against what's actually there: whole ones, in order, never a cut word.
-        cfg.header.push_back(component(
-            [head, detail, trailing, mid, head_st, trail_st, fgc = fg](int w, int) -> Element {
-                std::string d = detail;
-                if (!mid.empty()) {
-                    const int room = w - string_width(" " + head) - string_width("  " + trailing + " ");
-                    for (const auto& item : mid) {
-                        const std::string next = d.empty() ? item : d + " \xc2\xb7 " + item;
-                        if (string_width("  " + next) > room) break;
-                        d = next;
-                    }
-                }
-                return hstack().width(Dimension::percent(100))(
-                    text(" " + head, head_st) | clip | shrink(1.0f),
-                    text(d.empty() ? "" : "  " + d, fg_of(fgc))
-                        | clip | grow(1.0f) | shrink(50.0f),
-                    text("  " + trailing + " ", trail_st) | clip | shrink(1.0f)
-                ).build();
-            }));
-        cfg.header.push_back(sep);
+        viewer_header = maya::ToolViewer::Header{head, detail, trailing, mid, head_st, trail_st, fg};
     }
 
     // Body rows: built once per (entry, width, query), then windowed.
@@ -515,12 +481,10 @@ Element tool_output_panel(const Model& m) {
                     k = j;
                 }
             }
-            return Element{maya::TextElement{
-                .content = std::string{s},
-                .style   = base,
-                .wrap    = maya::TextWrap::TruncateEnd,
-                .runs    = std::move(runs),
-            }};
+            Span out{std::string{s}, base};
+            out.fill = true;
+            out.runs = std::move(runs);
+            return out;
         };
         auto note_hits = [&](std::string_view s) {
             if (!o->query.empty() && !tool_output::hit_spans(s, o->query).empty())
@@ -545,16 +509,15 @@ Element tool_output_panel(const Model& m) {
                     if (nl == std::string_view::npos) nl = rest.size();
                     for (auto v : wrap_rows(rest.substr(p, nl - p), std::max(10, pane_w - 2))) {
                         note_hits(v);
-                        cache.rows.push_back(hstack().width(Dimension::percent(100))(
-                            text(first ? "$ " : "  ", fg_bold(cmd_hue)),
-                            line_row(v, fg_of(fg), false) | grow(1.0f) | shrink(1.0f)
-                        ).build() | height(1) | overflow(Overflow::Hidden));
+                        cache.rows.push_back(Line::row({
+                            Span{first ? "$ " : "  ", fg_bold(cmd_hue)},
+                            line_row(v, fg_of(fg), false)}));
                         first = false;
                     }
                     if (nl == rest.size()) break;
                     p = nl + 1;
                 }
-                cache.rows.push_back(sep);
+                cache.rows.push_back(Line::rule());
             }
         }
 
@@ -606,8 +569,7 @@ Element tool_output_panel(const Model& m) {
                 std::string_view feed = e.call.progress_text();
                 if (feed.starts_with("\xe2\x97\x86 ")) {   // ◆ status line
                     if (auto row = task_status_row(feed.substr(0, feed.find('\n'))); !row.empty())
-                        cache.rows.push_back(text(row, fg_of(tool_hue))
-                                             | height(1) | overflow(Overflow::Hidden));
+                        cache.rows.push_back(Line::row({Span{row, fg_of(tool_hue)}}));
                 }
             }
             if (!kids.empty()) {
@@ -617,7 +579,7 @@ Element tool_output_panel(const Model& m) {
                 std::string head = std::to_string(kids.size()) + (kids.size() == 1 ? " call" : " calls");
                 if (bad > 0) head += "  \xc2\xb7  " + std::to_string(bad) + " failed";
                 head += "  \xc2\xb7  Tab to pick, Enter to open";
-                cache.rows.push_back(text(head, fg_dim(muted)) | height(1) | overflow(Overflow::Hidden));
+                cache.rows.push_back(Line::row({Span{head, fg_dim(muted)}}));
                 const auto t0 = e.call.started_at();
                 const int out_w = std::max(10, pane_w - 6);
                 for (std::size_t ci = 0; ci < kids.size(); ++ci) {
@@ -640,16 +602,16 @@ Element tool_output_panel(const Model& m) {
                                     : c.ms > 0     ? std::format("{}ms", c.ms)
                                                    : std::string{"\xe2\x80\x93"};
                     if (dur.size() < 7) dur.insert(0, 7 - std::min<std::size_t>(7, string_width(dur)), ' ');
-                    cache.rows.push_back(hstack().width(Dimension::percent(100))(
-                        text(selected ? "\xe2\x96\xb8" : " ", fg_bold(accent)),   // ▸ cursor
-                        text(icon, fg_bold(ic)),
-                        text(tool_display_name(c.name),
-                             cancelled ? fg_bold(muted) : fg_bold(tool_category_color(c.name))),
-                        text("  "),
-                        text(tool_timeline_detail(kt), failed ? fg_of(danger) : fg_dim(fg))
-                            | clip | grow(1.0f) | shrink(1.0f),
-                        text("  " + dur, fg_dim(muted))
-                    ).build() | height(1) | overflow(Overflow::Hidden));
+                    Span what{tool_timeline_detail(kt), failed ? fg_of(danger) : fg_dim(fg)};
+                    what.fill = true;
+                    cache.rows.push_back(Line::row({
+                        Span{selected ? "\xe2\x96\xb8" : " ", fg_bold(accent)},   // ▸ cursor
+                        Span{icon, fg_bold(ic)},
+                        Span{tool_display_name(c.name),
+                             cancelled ? fg_bold(muted) : fg_bold(tool_category_color(c.name))},
+                        Span{"  "},
+                        std::move(what),
+                        Span{"  " + dur, fg_dim(muted)}}));
                     // Opened: the call's own output under it, on a rail.
                     if (open) {
                         std::string_view body = c.output;
@@ -662,25 +624,24 @@ Element tool_output_panel(const Model& m) {
                             if (nl == std::string_view::npos) nl = body.size();
                             for (auto v : wrap_rows(body.substr(p, nl - p), out_w)) {
                                 if (shown_lines++ >= kMaxOpenLines) break;
-                                cache.rows.push_back(hstack().width(Dimension::percent(100))(
-                                    text("   \xe2\x94\x8a ", fg_dim(failed ? danger : muted)),   // ┊
-                                    text(std::string{v}, failed ? fg_of(danger) : fg_dim(fg))
-                                        | clip | grow(1.0f) | shrink(1.0f)
-                                ).build() | height(1) | overflow(Overflow::Hidden));
+                                Span txt{std::string{v}, failed ? fg_of(danger) : fg_dim(fg)};
+                                txt.fill = true;
+                                cache.rows.push_back(Line::row({
+                                    Span{"   \xe2\x94\x8a ", fg_dim(failed ? danger : muted)},   // ┊
+                                    std::move(txt)}));
                             }
                             if (nl == body.size()) break;
                             p = nl + 1;
                         }
                         if (shown_lines >= kMaxOpenLines)
-                            cache.rows.push_back(text("   \xe2\x94\x8a \xe2\x8b\xaf more in the full log",
-                                                      fg_italic(muted))
-                                                 | height(1) | overflow(Overflow::Hidden));
+                            cache.rows.push_back(Line::row({Span{"   \xe2\x94\x8a \xe2\x8b\xaf more in the full log",
+                                                                fg_italic(muted)}}));
                     }
                 }
             }
 
             if (!e.is_live && !shown.empty()) {
-                if (!kids.empty()) cache.rows.push_back(sep);
+                if (!kids.empty()) cache.rows.push_back(Line::rule());
                 const Style prose  = e.failed ? fg_of(danger) : fg_of(fg);
                 const Style strong = fg_bold(fg);
                 const Style head_st = fg_bold(tool_hue);
@@ -730,16 +691,13 @@ Element tool_output_panel(const Model& m) {
                             runs.push_back({k, j - k, st[off + k]});
                             k = j;
                         }
-                        cache.rows.push_back(hstack().width(Dimension::percent(100))(
-                            text("\xe2\x94\x83 ", fg_dim(tool_hue)),   // ┃
-                            text(first ? lead : std::string(static_cast<std::size_t>(lead_w), ' '), lead_st),
-                            Element{maya::TextElement{
-                                .content = std::string{v},
-                                .style   = base,
-                                .wrap    = maya::TextWrap::TruncateEnd,
-                                .runs    = std::move(runs),
-                            }} | grow(1.0f) | shrink(1.0f)
-                        ).build() | height(1) | overflow(Overflow::Hidden));
+                        Span txt{std::string{v}, base};
+                        txt.fill = true;
+                        txt.runs = std::move(runs);
+                        cache.rows.push_back(Line::row({
+                            Span{"\xe2\x94\x83 ", fg_dim(tool_hue)},   // ┃
+                            Span{first ? lead : std::string(static_cast<std::size_t>(lead_w), ' '), lead_st},
+                            std::move(txt)}));
                         first = false;
                     }
                 };
@@ -748,8 +706,7 @@ Element tool_output_panel(const Model& m) {
                 bool in_code = false, any = false, pending_blank = false;
                 auto flush_blank = [&] {
                     if (pending_blank && any)
-                        cache.rows.push_back(text("\xe2\x94\x83", fg_dim(tool_hue))
-                                             | height(1) | overflow(Overflow::Hidden));
+                        cache.rows.push_back(Line::row({Span{"\xe2\x94\x83", fg_dim(tool_hue)}}));
                     pending_blank = false;
                     any = true;
                 };
@@ -824,20 +781,9 @@ Element tool_output_panel(const Model& m) {
             bp.show_all   = true;       // the full output, no "⋯ N more"
             bp.tail_only  = e.is_live;  // live: newest at the bottom
             bp.show_streaming_placeholder = false;
-            Element body = maya::ToolBodyPreview{std::move(bp)}.build();
-            // One vstack of rows: split it so the window can address rows.
-            // Each child is held to one screen row so max_y stays exact.
-            if (auto* box = maya::as_box(body);
-                box && box->layout.direction == maya::FlexDirection::Column
-                && !box->children.empty()) {
-                cache.rows.reserve(cache.rows.size() + box->children.size());
-                for (auto& child : box->children)
-                    cache.rows.push_back(std::move(child) | height(1)
-                                         | overflow(Overflow::Hidden));
-            } else {
-                cache.rows.push_back(std::move(body) | height(1)
-                                     | overflow(Overflow::Hidden));
-            }
+            // One row per screen row, so the window can address rows.
+            for (auto& row : maya::ToolViewer::preview_rows(std::move(bp)))
+                cache.rows.push_back(std::move(row));
         } else if (e.thinking && !shown.empty()) {
             if (!grew_only) cache.reveal_row0 = cache.rows.size();
             // Prose, the way the transcript draws it: the brand rail, word
@@ -876,17 +822,14 @@ Element tool_output_panel(const Model& m) {
                 }
                 if (body.empty()) {
                     note_blank(ln.data());
-                    cache.rows.push_back(text("\xe2\x94\x83", fg_dim(role_brand))   // ┃
-                                         | height(1) | overflow(Overflow::Hidden));
+                    cache.rows.push_back(Line::row({Span{"\xe2\x94\x83", fg_dim(role_brand)}}));   // ┃
                 } else {
                     for (auto v : wrap_rows(body, text_w)) {
                         note_hits(v);
                         note_span(v);
-                        cache.rows.push_back(hstack().width(Dimension::percent(100))(
-                            text("\xe2\x94\x83 ", fg_dim(role_brand)),
-                            line_row(v, strong ? beat : prose, false)
-                                | grow(1.0f) | shrink(1.0f)
-                        ).build() | height(1) | overflow(Overflow::Hidden));
+                        cache.rows.push_back(Line::row({
+                            Span{"\xe2\x94\x83 ", fg_dim(role_brand)},
+                            line_row(v, strong ? beat : prose, false)}));
                     }
                 }
                 if (nl == shown.size()) break;
@@ -950,27 +893,24 @@ Element tool_output_panel(const Model& m) {
                 for (auto v : wrap_rows(lines[i], text_w)) {
                     note_hits(v);
                     if (v.empty()) note_blank(lines[i].data()); else note_span(v);
-                    cache.rows.push_back(hstack().width(Dimension::percent(100))(
-                        text(first ? " " + num + " " : blank_gutter, fg_dim(muted)),
-                        text(first ? "\xe2\x94\x82 " : "\xe2\x94\x8a ", fg_dim(pipe_hue)),   // │ ┊
-                        (cut ? line_row(v, fg_italic(muted), false)
-                             : line_row(v, base, !e.failed))
-                            | grow(1.0f) | shrink(1.0f)
-                    ).build() | height(1) | overflow(Overflow::Hidden));
+                    cache.rows.push_back(Line::row({
+                        Span{first ? " " + num + " " : blank_gutter, fg_dim(muted)},
+                        Span{first ? "\xe2\x94\x82 " : "\xe2\x94\x8a ", fg_dim(pipe_hue)},   // │ ┊
+                        cut ? line_row(v, fg_italic(muted), false)
+                            : line_row(v, base, !e.failed)}));
                     first = false;
                 }
             }
             cache.total_cp = cp_at(shown.data() + shown.size());
         } else if (!e.is_live) {
-            cache.rows.push_back(text("  (no output)", fg_italic(muted))
-                                 | height(1) | overflow(Overflow::Hidden));
+            cache.rows.push_back(Line::row({Span{"  (no output)", fg_italic(muted)}}));
         }
     }
 
     // Thinking ends the way the transcript's block does: a blank row, then
     // "✦ Reasoned · 216 tokens · 4.3s · 50 tok/s". Built per frame (the
     // clock ticks while live), so it sits after the cached rows.
-    std::vector<Element> tail_rows;
+    std::optional<maya::ToolViewer::Tail> viewer_tail;
     if (e.thinking && !cache.rows.empty() && o->query.empty()) {
         const std::size_t toks = (e.output.size() + 3) / 4;
         auto tok_label = [](std::size_t t) {
@@ -994,38 +934,26 @@ Element tool_output_panel(const Model& m) {
             if (const long r = std::lround(static_cast<double>(toks) * 1000.0
                                            / static_cast<double>(thought_ms)); r > 0)
                 meta += std::format("  \xc2\xb7  {} tok/s", r);
-        tail_rows.push_back(text("") | height(1));
-        tail_rows.push_back(hstack()(
-            text("\xe2\x9c\xa6 ", thinking_live ? fg_of(role_brand) : fg_dim(role_brand)),   // ✦
-            text(thinking_live ? "Thinking" : "Reasoned", fg_bold(text_secondary)),
-            text(meta, fg_italic(text_secondary)) | clip | shrink(1.0f)
-        ).build() | height(1) | overflow(Overflow::Hidden));
+        viewer_tail = maya::ToolViewer::Tail{thinking_live, meta, role_brand, text_secondary};
     }
 
-    // Window the cached rows into the pane. The pane must never be taller
-    // than the terminal (a too-tall frame scrolls into scrollback), and the
-    // header, status and hint rows can each wrap at some width, so rather
-    // than guess the chrome we build, measure, and give the body less until
-    // it fits.
-    const int cached_rows = static_cast<int>(cache.rows.size());
-    const int total_rows = cached_rows + static_cast<int>(tail_rows.size());
-    auto& sc = m.ui.tool_viewer_scroll;
+    // Window, typewriter, status, hints and fitting: maya::ToolViewer.
     const int nhits = static_cast<int>(cache.hit_rows.size());
     const int cur_hit = nhits > 0 ? ((o->hit % nhits) + nhits) % nhits : -1;
-    const int cur_row = cur_hit >= 0 ? cache.hit_rows[static_cast<std::size_t>(cur_hit)] : -1;
-    // Find: bring the current match into view once per jump, a third of
-    // the way down so there's context above it.
+    // Find: bring the current match into view once per jump.
     static int seen_seq = -1;
     const bool jump_to_hit = cur_hit >= 0 && seen_seq != o->hit_seq;
     seen_seq = o->hit_seq;
-    const int y_before = sc.y;
 
-    const Panel::Config base = std::move(cfg);
+    maya::ToolViewer::Config vc;
+    vc.base   = std::move(cfg);
+    vc.header = std::move(viewer_header);
+    vc.rows   = &cache.rows;
+    vc.tail   = std::move(viewer_tail);
 
     // ── Reveal ── the transcript's typewriter on text arriving while you
-    // watch: rows past the cursor are blank, the row at the cursor gets
-    // decorate_text_reveal with the transcript's own tunables. Gated by the
-    // same Motion pref and env switches. Only plain and thinking bodies.
+    // watch, gated by the same Motion pref and env switches. Only plain and
+    // thinking bodies.
     const bool running = e.is_live || e.streaming;
     const bool reveal_on = m.env.reveal && m.env.reveal_typewriter
                            && agentty::ui_prefs::animations_on()
@@ -1034,222 +962,64 @@ Element tool_output_panel(const Model& m) {
     if (reveal_on) typed = advance_reveal(e, cache.total_cp, running);
     const bool revealing = reveal_on && typed < cache.total_cp;
     if (revealing) maya::anim::keep_animating();
-    auto reveal_row = [&](int i, Element row) -> Element {
-        if (!revealing) return row;
-        const auto k = static_cast<std::size_t>(i) - cache.reveal_row0;
-        if (static_cast<std::size_t>(i) < cache.reveal_row0 || k >= cache.row_cp_begin.size())
-            return row;
-        const std::size_t b = cache.row_cp_begin[k], n = cache.row_cp_len[k];
-        if (n == 0 || b + n <= typed) return row;               // fully typed
-        if (b >= typed) return text("") | height(1);            // not yet
-        // The row with the cursor: clip its text leaf, then decorate it.
-        TextElement* leaf = nullptr;
-        std::function<void(Element&)> find = [&](Element& el) {
-            std::visit([&](auto& node) {
-                using T = std::decay_t<decltype(node)>;
-                if constexpr (std::is_same_v<T, TextElement>) leaf = &node;
-                else if constexpr (std::is_same_v<T, BoxElement>)
-                    for (auto& c : node.children) find(c);
-            }, el.inner);
-        };
-        find(row);
-        if (!leaf) return row;
-        const std::size_t keep_cp = typed - b;
-        const std::size_t cut = cp_offset(leaf->content, keep_cp);
-        std::erase_if(leaf->runs, [&](const maya::StyledRun& r) { return r.byte_offset >= cut; });
-        for (auto& r : leaf->runs)
-            r.byte_length = std::min(r.byte_length, cut - r.byte_offset);
-        maya::anim::TextRevealParams rp;
-        rp.ms_total     = maya::anim_now_ms();
-        rp.edge_age_ms  = 0;
-        rp.revealed_cp  = keep_cp;
-        rp.total_cp     = n;
-        rp.clip_active  = true;
-        rp.clipped_unrevealed_cp = n - keep_cp;
-        rp.line_bounded = true;
-        rp.scramble_glyph_safe = true;
-        rp.wrap_width   = 0;
-        // Speed-scaled like the transcript, so the shimmer covers the same
-        // spatial window at any rate.
-        const double rate = overlay_reveal().cursor.effective_rate();
-        const double scale = std::clamp(rate > 1.0 ? 45.0 / rate : 1.0, 0.35, 2.5);
-        rp.scramble_ms  = static_cast<std::int64_t>(rp.scramble_ms * scale);
-        rp.char_step_ms = static_cast<std::int64_t>(rp.char_step_ms * scale);
-        if (agentty::ui_prefs::reveal_decoration_on() && m.env.reveal_decorate)
-            (void)maya::anim::decorate_text_reveal(*leaf, rp);
-        else
-            leaf->content.resize(cut);
-        leaf->cached_width = -1;
-        return row;
-    };
+    vc.reveal = {revealing, typed, cache.reveal_row0, &cache.row_cp_begin, &cache.row_cp_len,
+                 overlay_reveal().cursor.effective_rate(),
+                 agentty::ui_prefs::reveal_decoration_on() && m.env.reveal_decorate};
 
-    auto assemble = [&](int vh, bool hints, bool header) {
-        Panel::Config c = base;
-        if (!header) c.header.clear();
-        c.scroll = nullptr;
-        sc.max_y = std::max(0, total_rows - vh);
-        sc.viewport_bounds.h = vh;   // page size for PgUp / PgDn
-        sc.y = jump_to_hit ? cur_row - vh / 3 : y_before;
-        // A running entry follows its newest output unless the user scrolled up.
-        if ((e.is_live || e.streaming) && m.ui.tool_viewer_tail && o->query.empty()) sc.y = sc.max_y;
-        sc.y = std::clamp(sc.y, 0, sc.max_y);
-        const int first = sc.y;
-        const int last  = std::min(total_rows, first + vh);
-        std::vector<Element> win;
-        for (int i = first; i < last; ++i) {
-            if (i >= cached_rows) {
-                win.push_back(tail_rows[static_cast<std::size_t>(i - cached_rows)]);
-                continue;
-            }
-            // While searching, a one-column margin marks the current match.
-            if (!o->query.empty())
-                win.push_back(hstack().width(Dimension::percent(100))(
-                    text(i == cur_row ? "\xe2\x96\xb8" : " ", fg_bold(warn)),   // ▸
-                    cache.rows[static_cast<std::size_t>(i)] | grow(1.0f) | shrink(1.0f)
-                ).build() | height(1) | overflow(Overflow::Hidden));
-            else
-                win.push_back(reveal_row(i, cache.rows[static_cast<std::size_t>(i)]));
-        }
-        if (total_rows == 0)
-            win.push_back(text("  waiting for output\xe2\x80\xa6", fg_italic(muted))
-                          | height(1) | overflow(Overflow::Hidden));
-        // The scrollbar column is always there, so text never reflows when
-        // the output grows past the pane; it only gets a thumb then.
-        const int win_h = std::max(1, static_cast<int>(win.size()));
-        maya::ScrollbarStyle bar = maya::ScrollbarStyle::overlay();
-        bar.thumb_color = base.accent;
-        Element gutter = total_rows > vh
-            ? maya::scrollbar_y(sc, win_h, bar)
-            : (text("") | width(1) | height(win_h));
-        c.prebuilt.push_back(hstack()(
-            vstack()(std::move(win)) | grow(1.0f) | shrink(1.0f),
-            std::move(gutter)).build());
-        if (compact_body) return c;
+    vc.query       = o->query;
+    vc.typing      = o->typing;
+    vc.hits        = nhits;
+    vc.current_hit = cur_hit;
+    vc.current_row = cur_hit >= 0 ? cache.hit_rows[static_cast<std::size_t>(cur_hit)] : -1;
+    vc.jump_to_hit = jump_to_hit;
+    vc.scroll      = &m.ui.tool_viewer_scroll;
+    vc.y_before    = m.ui.tool_viewer_scroll.y;
+    // A running entry follows its newest output unless the user scrolled up.
+    vc.follow      = running && m.ui.tool_viewer_tail && o->query.empty();
+    vc.compact     = compact_body;
+    if (cache.plain && cache.out_lines > 0)
+        vc.count = e.thinking
+            ? std::to_string(cache.words) + (cache.words == 1 ? " word" : " words")
+            : std::to_string(cache.out_lines) + (cache.out_lines == 1 ? " line" : " lines");
+    // Watching: you'll be taken to each new entry as it starts.
+    const bool watching = o->following && o->index == 0 && o->query.empty()
+                          && !o->typing && m.ui.tool_viewer_tail;
+    vc.following   = (following_kind || watching) && m.ui.tool_viewer_tail && o->query.empty();
+    vc.where_color = following_kind ? tool_hue : Color{muted};
+    vc.fresh_above = o->fresh_above;
 
-        // Status line: the find prompt or result, then where we are.
-        std::vector<Element> status;
-        if (o->typing || !o->query.empty()) {
-            status.push_back(text("  /", fg_bold(warn)) | clip);
-            status.push_back(text(o->query, fg_of(fg)) | clip | shrink(5.0f));
-            if (o->typing) status.push_back(text("\xe2\x96\x8f", fg_of(warn)) | clip);   // ▏ caret
-            std::string res = o->query.empty() ? ""
-                : nhits == 0 ? "  no matches"
-                : "  " + std::to_string(cur_hit + 1) + " of " + std::to_string(nhits);
-            status.push_back(text(res, nhits == 0 && !o->query.empty()
-                                           ? fg_of(danger) : fg_dim(muted)) | clip);
-        }
-        std::string where;
-        if (total_rows > vh) {
-            const int pct = sc.max_y == 0 ? 100 : (100 * sc.y) / sc.max_y;
-            where = sc.y == 0 ? "top" : sc.y >= sc.max_y ? "end" : std::to_string(pct) + "%";
-        }
-        if (cache.plain && cache.out_lines > 0) {
-            if (!where.empty()) where += " \xc2\xb7 ";
-            if (e.thinking) {
-                where += std::to_string(cache.words) + (cache.words == 1 ? " word" : " words");
-            } else {
-                where += std::to_string(cache.out_lines)
-                       + (cache.out_lines == 1 ? " line" : " lines");
-            }
-        }
-        // Watching: you'll be taken to each new entry as it starts.
-        const bool watching = o->following && o->index == 0 && o->query.empty()
-                              && !o->typing && m.ui.tool_viewer_tail;
-        if ((following_kind || watching) && m.ui.tool_viewer_tail && o->query.empty())
-            where += where.empty() ? "following" : " \xc2\xb7 following";
-        status.push_back(spacer());
-        // New entries landed above while you read. Say so; never jump.
-        if (o->fresh_above > 0)
-            status.push_back(text(" \xe2\x86\x91 " + std::to_string(o->fresh_above) + " new ",   // ↑
-                                  fg_bold(highlight)) | clip);
-        status.push_back(text(where + "  ", fg_dim(following_kind ? tool_hue : muted)) | clip);
-        c.footer.push_back(hstack().width(Dimension::percent(100))(std::move(status)).build()
-                           | height(1) | overflow(Overflow::Hidden));
-        if (!hints) return c;
-
-        std::vector<Hint> viewer_hints;
-        if (o->typing) {
-            viewer_hints = {
-                {"Enter", "keep", 5},
-                {"\xe2\x86\x91\xe2\x86\x93", "prev/next match", 4},   // ↑↓
-                {"Esc", "clear", 3},
-            };
-        } else {
-            viewer_hints = {
-                {"\xe2\x86\x91\xe2\x86\x93", "scroll", 6},        // ↑↓
-                {"PgUp/PgDn", "page", 3},
-                {"/", "find", 5},
-            };
-            if (!o->query.empty()) viewer_hints.push_back({"n/N", "next/prev", 5});
-            if (following_kind || o->following) viewer_hints.push_back({"End", "follow", 4});
-            if (o->entries.size() > 1)
-                viewer_hints.push_back({"\xe2\x86\x90\xe2\x86\x92",   // ←→
-                                        o->thinking_only ? "older/newer" : "other output", 4});
-            if (o->fresh_above > 0) viewer_hints.push_back({"t", "newest", 6});
-            if (!e.is_live) viewer_hints.push_back({"y", "copy", 4});
-            viewer_hints.push_back({"Esc", !o->query.empty() ? "clear"
-                                          : o->thinking_only ? "all blocks" : "back", 3});
-        }
-        c.footer.push_back(key_hints(std::move(viewer_hints)));
-        return c;
-    };
+    auto hint = [](std::string k, std::string l, int p) { return maya::KeyHint{std::move(k), std::move(l), p, fg}; };
+    if (o->typing) {
+        vc.hints = {hint("Enter", "keep", 5),
+                    hint("\xe2\x86\x91\xe2\x86\x93", "prev/next match", 4),   // ↑↓
+                    hint("Esc", "clear", 3)};
+    } else {
+        vc.hints = {hint("\xe2\x86\x91\xe2\x86\x93", "scroll", 6),        // ↑↓
+                    hint("PgUp/PgDn", "page", 3),
+                    hint("/", "find", 5)};
+        if (!o->query.empty()) vc.hints.push_back(hint("n/N", "next/prev", 5));
+        if (following_kind || o->following) vc.hints.push_back(hint("End", "follow", 4));
+        if (o->entries.size() > 1)
+            vc.hints.push_back(hint("\xe2\x86\x90\xe2\x86\x92",   // ←→
+                                    o->thinking_only ? "older/newer" : "other output", 4));
+        if (o->fresh_above > 0) vc.hints.push_back(hint("t", "newest", 6));
+        if (!e.is_live) vc.hints.push_back(hint("y", "copy", 4));
+        vc.hints.push_back(hint("Esc", !o->query.empty() ? "clear"
+                                       : o->thinking_only ? "all blocks" : "back", 3));
+    }
 
     // The overlay floats 2 rows above the bottom and is 4 columns narrower
     // than the terminal (compose_panel / maya::Overlay), so that's the room.
-    const int budget = std::max(3, body_term_rows - 2);
-    const int cols   = std::max(10, panel_terminal_cols() - 4);
-    // Never more viewport than there is output, so each fit pass removes rows
-    // that are really there.
-    //
-    // Start from what fit last frame -- for THIS entry at this size. Scrolling
-    // re-runs this every keypress, and the nominal viewport is always a few
-    // rows too tall for the chrome, so every frame built and measured the
-    // panel twice. Keyed on the entry and its starting height: reusing a
-    // short entry's tiny fit for a long one left the pane stuck at 1-2 rows
-    // ("it never changes height when I move"). And a memo that fits with
-    // room to spare is dropped and re-fit from the top.
-    struct FitMemo { int term_rows = -1, term_cols = -1, start = -1, index = -1, vh = -1;
-                     bool thinking = false, hints = true, header = true, tight = false; };
-    static FitMemo fit;   // UI thread only, like the body cache
-    const int start_vh = std::clamp(base.viewport_h, 1, std::max(1, total_rows));
-    int  vh = start_vh;
-    bool hints = true, header = true, tight = false;
-    bool from_memo = false;
-    if (fit.term_rows == body_term_rows && fit.term_cols == cols && fit.start == start_vh
-        && fit.index == cur && fit.thinking == o->thinking_only && fit.vh > 0) {
-        vh = std::min(fit.vh, start_vh);
-        hints = fit.hints; header = fit.header; tight = fit.tight;
-        from_memo = true;
-    }
-    Element out;
-    for (int pass = 0; pass < 8; ++pass) {
-        auto c = assemble(vh, hints, header);
-        c.tight = tight;
-        out = Panel{std::move(c)}.build();
-        const int h = maya::measure_element(out, cols).height.value;
-        if (h <= budget) {
-            // Fits, but smaller than it could be: the memo was stale.
-            if (from_memo && h < budget
-                && (vh < start_vh || !hints || !header || tight)) {
-                from_memo = false;
-                vh = start_vh; hints = true; header = true; tight = false;
-                continue;
-            }
-            fit = {body_term_rows, cols, start_vh, cur, vh, o->thinking_only, hints, header, tight};
-            break;
-        }
-        from_memo = false;
-        const int over = h - budget;
-        // Keep at least 3 rows of output while there's chrome left to drop.
-        if (vh > 3)          vh = std::max(3, vh - over);
-        else if (!tight)     tight = true;                  // then the frame's blank rows
-        else if (hints)      hints = false;                 // then the key hints
-        else if (header)     header = false;                // then the header
-        else if (vh > 1)     vh = std::max(1, vh - over);   // last, the output itself
-        else break;
-    }
-    return out;
+    // What fit last frame is kept, keyed on this entry and size.
+    static maya::ToolViewer::FitMemo fit;   // UI thread only, like the body cache
+    vc.budget        = std::max(3, body_term_rows - 2);
+    vc.cols          = std::max(10, panel_terminal_cols() - 4);
+    vc.memo          = &fit;
+    vc.term_rows     = body_term_rows;
+    vc.index         = cur;
+    vc.thinking_only = o->thinking_only;
+    vc.text = fg; vc.muted = muted; vc.warn = warn; vc.danger = danger; vc.highlight = highlight;
+    return maya::ToolViewer{std::move(vc)}.build();
 }
-
 
 } // namespace agentty::ui

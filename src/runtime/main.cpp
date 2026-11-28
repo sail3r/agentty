@@ -78,6 +78,7 @@
 #endif
 
 #include <maya/maya.hpp>
+#include <maya/widget/agentty/report.hpp>
 #include <maya/host/run.hpp>   // maya::run: the jaal host
 #include <maya/platform/io.hpp>   // query_terminal_size (sandbox banner)
 #include "agentty/runtime/app/host.hpp"   // agentty::app::Host
@@ -648,48 +649,11 @@ int cmd_diagnostics() {
 // `agentty --help | less` would be garbage.)
 namespace help_ui {
 
-using namespace maya::dsl;
-
-// One row: name in the left gutter, description wrapping in the right.
-maya::Element entry(std::string name, std::string desc, int gutter) {
-    // width() alone is a REQUEST, not a clamp: a name longer than the
-    // gutter ("  mcp-logout <srv>") pushes the description column right
-    // and the row stops lining up with its neighbours. Pinning min and
-    // max to the same value makes the gutter exact, so descriptions —
-    // including wrapped continuation lines — all start at one column.
-    //
-    // A name that does not FIT the gutter is a different problem, and
-    // the clamp alone makes it worse: the name wraps inside its own
-    // column and the second line collides with the description. That is
-    // a content bug (shorten the name), but it should degrade into
-    // something readable rather than a scramble, so an overlong name
-    // gets its own line with the description indented underneath.
-    const int name_w = static_cast<int>(maya::unicode::str_width(name));
-    if (name_w >= gutter) {
-        auto indent = maya::hstack();
-        indent.width(maya::Dimension::fixed(gutter));
-        indent.min_width(maya::Dimension::fixed(gutter));
-        indent.max_width(maya::Dimension::fixed(gutter));
-        auto rest = maya::hstack();
-        rest.grow();
-        auto second = maya::hstack();
-        auto stack = maya::vstack();
-        return stack(text(std::move(name)),
-                     second(indent(text("")), rest(text(std::move(desc)))));
-    }
-
-    auto left = maya::hstack();
-    left.width(maya::Dimension::fixed(gutter));
-    left.min_width(maya::Dimension::fixed(gutter));
-    left.max_width(maya::Dimension::fixed(gutter));
-    auto right = maya::hstack();
-    right.grow();
-    auto row = maya::hstack();
-    return row(left(text(std::move(name))), right(text(std::move(desc))));
-}
-
-maya::Element heading(std::string s) { return text(std::move(s)); }
-maya::Element blank() { return text(""); }
+// The help page's rows are maya::report's (widget/agentty/report.hpp):
+// an exact name gutter, descriptions wrapping beside it.
+using maya::report::entry;
+inline maya::Element heading(std::string s) { return maya::report::words(std::move(s)); }
+inline maya::Element gap() { return maya::report::blank(); }
 
 } // namespace help_ui
 
@@ -698,13 +662,11 @@ void print_usage() {
     constexpr int kCmdGutter  = 20;   // "  mcp-logout <srv>  "
     constexpr int kOptGutter  = 23;   // "  -w, --workspace DIR " + a space
 
-    auto doc = maya::vstack();
-    doc.gap(0);
-    auto body = doc(
-        text(std::string{"agentty "} + ::agentty::version()) | Bold,
-        blank(),
-        text("usage: agentty [subcommand] [options]") | Dim,
-        blank(),
+    auto body = maya::report::doc({
+        maya::report::words(std::string{"agentty "} + ::agentty::version(), maya::Style{}.with_bold()),
+        gap(),
+        maya::report::words("usage: agentty [subcommand] [options]", maya::Style{}.with_dim()),
+        gap(),
         heading("subcommands"),
         entry("  login", "Authenticate (API key, or OAuth via claude.ai)", kCmdGutter),
         entry("  logout", "Remove saved credentials", kCmdGutter),
@@ -768,7 +730,7 @@ void print_usage() {
                           "(--check: only report, don't install)", kCmdGutter),
         entry("  version", "Print the agentty version and exit", kCmdGutter),
         entry("  help", "Show this message", kCmdGutter),
-        blank(),
+        gap(),
         heading("options"),
         entry("  -k, --key KEY", "API-key override for this session", kOptGutter),
         entry("  -m, --model ID", "Model id (e.g. claude-opus-4-5)", kOptGutter),
@@ -830,7 +792,7 @@ void print_usage() {
                                        "OPENAI_API_KEY) is sent raw under that name. "
                                        "Session-scoped like -k; default: Bearer.", kOptGutter),
         entry("  -h, --help", "Show this message.", kOptGutter),
-        blank());
+        gap()});
 
     // ONE output path, plain, everywhere. The only thing that varies is
     // the width we lay out for: a real terminal gets its own, anything
@@ -1752,27 +1714,19 @@ int run_main(int argc, char** argv, const maya::unlocked& cap) {
         // On stderr via render_to_string so it cannot be mistaken for tool
         // output on stdout, which `agentty run` callers parse.
         if (mode == tools::util::sandbox::Mode::Off) {
-            using namespace maya::dsl;
-            using maya::BorderStyle;
-            using maya::BorderTextPos;
-            using maya::BorderTextAlign;
             const auto warn = ui::status_warn;
-            auto banner =
-                vstack()
-                    .padding(1, 2)
-                    .border(BorderStyle::Double)
-                    .border_color(warn)
-                    .border_text(" \xe2\x9a\xa0  SANDBOX IS OFF ",
-                                 BorderTextPos::Top, BorderTextAlign::Center)(
-                        text("Tool commands run UNCONFINED \xe2\x80\x94 "
-                             "they can read and write anything your user "
-                             "account can: every file, the network, your "
-                             "credentials.",
-                             ui::fg_bold(warn)),
-                        text(""),
-                        text("Re-enable by starting agentty without  --sandbox off  "
-                             "(the Settings pane can't turn it back on).",
-                             ui::fg_dim(ui::muted)));
+            auto banner = maya::report::banner(
+                " \xe2\x9a\xa0  SANDBOX IS OFF ",
+                {maya::report::words("Tool commands run UNCONFINED \xe2\x80\x94 "
+                                     "they can read and write anything your user "
+                                     "account can: every file, the network, your "
+                                     "credentials.",
+                                     ui::fg_bold(warn)),
+                 maya::report::blank(),
+                 maya::report::words("Re-enable by starting agentty without  --sandbox off  "
+                                     "(the Settings pane can't turn it back on).",
+                                     ui::fg_dim(ui::muted))},
+                warn);
             // render_to_string_ansi, not maya::print: print() writes to
             // STDOUT, and `agentty run` callers parse stdout. A banner there
             // would corrupt the one stream a script reads.

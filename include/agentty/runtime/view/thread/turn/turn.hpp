@@ -2,8 +2,8 @@
 #include <cstddef>
 #include <span>
 #include <string_view>
-#include <maya/widget/conversation.hpp>
-#include <maya/widget/turn.hpp>
+#include <maya/widget/agentty/conversation.hpp>
+#include <maya/widget/agentty/turn.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

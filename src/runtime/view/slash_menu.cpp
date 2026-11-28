@@ -10,7 +10,7 @@
 #include <string>
 
 #include <maya/core/render_context.hpp>
-#include <maya/widget/completion_menu.hpp>
+#include <maya/widget/agentty/completion_menu.hpp>
 
 #include "agentty/runtime/slash.hpp"
 #include "agentty/runtime/view/palette.hpp"

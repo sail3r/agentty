@@ -16,6 +16,7 @@
 #include <maya/core/anim_clock.hpp>
 #include <maya/terminal/tmux.hpp>
 #include <maya/core/motion.hpp>   // anim::keep_animating_after (typing-window lapse wake)
+#include <maya/widget/agentty/line.hpp>
 
 namespace agentty::ui {
 
@@ -299,12 +300,12 @@ maya::Composer::Config composer_config(const Model& m) {
     // While the `/` menu is open its keys take the slot, so you can see
     // how to complete, run and dismiss without guessing.
     if (slash_menu_open(m)) {
-        auto k = [](const char* s) { return maya::dsl::text(s, maya::Style{}.with_fg(fg).with_bold()); };
-        auto l = [](const char* s) { return maya::dsl::text(s, maya::Style{}.with_fg(muted).with_dim()); };
-        cfg.status = maya::dsl::h(k("\xe2\x86\xb9"), l(" complete  "),     // ↹
-                                  k("\xe2\x86\xb5"), l(" run  "),          // ↵
-                                  k("\xe2\x86\x91\xe2\x86\x93"), l(" pick  "), // ↑↓
-                                  k("esc"), l(" hide")).build();
+        const auto k = maya::Style{}.with_fg(fg).with_bold();
+        const auto l = maya::Style{}.with_fg(muted).with_dim();
+        cfg.status = maya::Line{{"\xe2\x86\xb9", k}, {" complete  ", l},     // ↹
+                                {"\xe2\x86\xb5", k}, {" run  ", l},          // ↵
+                                {"\xe2\x86\x91\xe2\x86\x93", k}, {" pick  ", l}, // ↑↓
+                                {"esc", k}, {" hide", l}};
     }
     // TYPING MID-TURN: say what Enter will actually do.
     //
@@ -324,11 +325,9 @@ maya::Composer::Config composer_config(const Model& m) {
     // carries the long form, which is where someone asking "what happened
     // to my message" is already looking.
     else if (m.s.active() && !m.ui.composer.text.empty()) {
-        cfg.status = maya::dsl::h(
-            model_badge_config(m),
-            maya::dsl::text(m.d.pending_question ? "  \xe2\x86\xb5 answers the question"
-                                                 : "  \xe2\x86\xb5 queues",
-                            maya::Style{}.with_fg(muted).with_dim())).build();
+        cfg.status = model_badge_config(m, m.d.pending_question
+                                               ? "  \xe2\x86\xb5 answers the question"
+                                               : "  \xe2\x86\xb5 queues");
     }
 
     // ── Ambient counters over the REAL payload ──────────────────────

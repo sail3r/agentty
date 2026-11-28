@@ -50,7 +50,7 @@ needs DECSTBM.
 - `third_party/maya/src/render/serialize.cpp` — DECSTBM decision, tear-down,
   activate hook, anchored-steady diff branch all gone. Back to
   legacy emit on every frame.
-- `third_party/maya/include/maya/widget/app_layout.hpp` — composer group no
+- `third_party/maya/include/maya/widget/agentty/app_layout.hpp` — composer group no
   longer wrapped.
 
 ## What stays from the session

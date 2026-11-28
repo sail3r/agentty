@@ -20,12 +20,10 @@
 #include <string>
 #include <vector>
 
-#include <maya/dsl.hpp>
 #include <maya/element/element.hpp>
-#include <maya/element/text.hpp>   // maya::string_width
 #include <maya/render/cache_id.hpp>
-#include <maya/widget/conversation.hpp>
-#include <maya/widget/turn.hpp>
+#include <maya/widget/agentty/conversation.hpp>
+#include <maya/widget/agentty/turn.hpp>
 
 #include "agentty/domain/conversation.hpp"
 #include "agentty/domain/ui_live.hpp"   // compact_turns: the seam's height
@@ -50,15 +48,10 @@ namespace agentty::ui {
 // pref the element reads — gap_rows(), never a constant that has to be
 // remembered — and both are evaluated at the same instant.
 inline maya::Element gap_row() {
-    using namespace maya::dsl;
-    if (ui_prefs::current().compact_turns)
-        return maya::Conversation::divider();
-    return v(blank(),
-             maya::Conversation::divider(),
-             blank()).build();
+    return maya::Conversation::gap(ui_prefs::current().compact_turns);
 }
 [[nodiscard]] inline int gap_rows() noexcept {
-    return ui_prefs::current().compact_turns ? 1 : 3;
+    return maya::Conversation::gap_rows(ui_prefs::current().compact_turns);
 }
 // Retained as the NON-compact height for call sites that reason about the
 // roomy layout specifically. Anything sealing a gap_row() must use
@@ -86,44 +79,12 @@ inline constexpr int kGapRows = 3;
 // The label literal "Conversation compacted" is load-bearing: the seam
 // tests (midrun_seam_test) grep for it to count divider copies.
 inline maya::Element compaction_divider_row() {
-    using namespace maya::dsl;
-    return maya::detail::component([](int w, int /*h*/) -> maya::Element {
-        if (w <= 0) return blank().build();
-        const std::string glyph = "\xe2\x89\xa1";              // ≡ (1 col)
-        const std::string label = "Conversation compacted";    // ASCII
-        // cells: glyph(1) + space(1) + label + two spaces each side
-        const int label_cells = 2 + static_cast<int>(label.size());
-        const int rule_total  = w - label_cells - 4;
-        if (rule_total < 4) {
-            // Too narrow to flank — left-aligned compact form.
-            return h(
-                text("   "),
-                text(glyph + " ", maya::Style{}.with_fg(accent)),
-                text(label, maya::Style{}.with_fg(text_secondary).with_dim())
-            ).build();
-        }
-        const int left  = rule_total / 2;
-        const int right = rule_total - left;
-        std::string lrule, rrule;
-        lrule.reserve(static_cast<std::size_t>(left) * 3);
-        rrule.reserve(static_cast<std::size_t>(right) * 3);
-        for (int i = 0; i < left; ++i)  lrule += "\xe2\x94\x88";   // ┈
-        for (int i = 0; i < right; ++i) rrule += "\xe2\x94\x88";
-        return h(
-            text(std::move(lrule),
-                 maya::Style{}.with_fg(muted).with_dim()),
-            text("  "),
-            text(glyph, maya::Style{}.with_fg(accent)),
-            text(" "),
-            text(label, maya::Style{}.with_fg(text_secondary).with_dim()),
-            text("  "),
-            text(std::move(rrule),
-                 maya::Style{}.with_fg(muted).with_dim())
-        ).build();
-    })
-    .hash_id(maya::CacheIdBuilder{}
-        .add(std::string_view{"agentty.compaction.divider.v2"})
-        .build());
+    return maya::Conversation::section_break({
+        .glyph = "\xe2\x89\xa1",                  // ≡
+        .label = "Conversation compacted",
+        .from  = {},
+        .cache_tag = {"agentty.compaction.divider.v2"},
+        .accent = accent, .secondary = text_secondary, .muted = muted});
 }
 
 // True iff a run starting at message index `idx` opens on a compaction
@@ -144,41 +105,13 @@ inline bool compaction_boundary_at(
 // "→ continued in agentty · from Codex". One row, same rules as the
 // compaction divider (both builders call this, so the bytes can't drift).
 inline maya::Element import_seam_row(std::string source_name) {
-    using namespace maya::dsl;
-    return maya::detail::component([source_name](int w, int /*h*/) -> maya::Element {
-        if (w <= 0) return blank().build();
-        const std::string glyph = "\xe2\x86\x92";   // →
-        const std::string label = "continued in agentty";
-        const std::string from  = "from " + source_name;
-        const int label_cells = 2 + static_cast<int>(label.size()) + 3
-                              + static_cast<int>(maya::string_width(from));
-        const int rule_total  = w - label_cells - 4;
-        if (rule_total < 4) {
-            return h(text("   "),
-                     text(glyph + " ", maya::Style{}.with_fg(accent)),
-                     text(label, maya::Style{}.with_fg(text_secondary).with_dim())).build();
-        }
-        const int left  = rule_total / 2;
-        const int right = rule_total - left;
-        std::string lrule, rrule;
-        for (int i = 0; i < left; ++i)  lrule += "\xe2\x94\x88";   // ┈
-        for (int i = 0; i < right; ++i) rrule += "\xe2\x94\x88";
-        return h(
-            text(std::move(lrule), maya::Style{}.with_fg(muted).with_dim()),
-            text("  "),
-            text(glyph, maya::Style{}.with_fg(accent)),
-            text(" "),
-            text(label, maya::Style{}.with_fg(text_secondary).with_dim()),
-            text(" \xc2\xb7 ", maya::Style{}.with_fg(muted).with_dim()),
-            text(from, maya::Style{}.with_fg(muted).with_dim()),
-            text("  "),
-            text(std::move(rrule), maya::Style{}.with_fg(muted).with_dim())
-        ).build();
-    })
-    .hash_id(maya::CacheIdBuilder{}
-        .add(std::string_view{"agentty.import.seam.v1"})
-        .add(std::string_view{source_name})
-        .build());
+    // The tag view must outlive the call: section_break hashes it up front.
+    return maya::Conversation::section_break({
+        .glyph = "\xe2\x86\x92",                  // →
+        .label = "continued in agentty",
+        .from  = "from " + source_name,
+        .cache_tag = {"agentty.import.seam.v1", source_name},
+        .accent = accent, .secondary = text_secondary, .muted = muted});
 }
 
 // The message index the import seam sits before, or SIZE_MAX for none: the

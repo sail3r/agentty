@@ -122,14 +122,14 @@ std::string device_id() {
     std::random_device rd;
     std::mt19937_64 gen(((std::uint64_t)rd() << 32) ^ rd() ^
                         (std::uint64_t)now_ms_impl());
-    auto h = [&](int n) {
+    auto hex = [&](int n) {
         std::string s;
         static const char* x = "0123456789abcdef";
         for (int i = 0; i < n; ++i) s.push_back(x[gen() & 0xF]);
         return s;
     };
-    std::string id = h(8) + "-" + h(4) + "-4" + h(3) + "-" +
-                     std::string(1, "89ab"[gen() & 0x3]) + h(3) + "-" + h(12);
+    std::string id = hex(8) + "-" + hex(4) + "-4" + hex(3) + "-" +
+                     std::string(1, "89ab"[gen() & 0x3]) + hex(3) + "-" + hex(12);
     // Publish once: the first process to link the file wins and every other
     // one (now or later) reads the winner, so the id never changes.
     (void)persistence::create_exclusive(::agentty::IoAccess::grant(), path, id);

@@ -863,13 +863,13 @@ maya::Element agent_timeline_element(std::span<const ToolUse> tool_calls,
             const std::shared_ptr<const maya::Element>* p = c.get(key);
             return p ? *p : std::shared_ptr<const maya::Element>{};
         }))
-        return maya::Element{hit};   // shared handle: refcount bump, no tree copy
+        return hit;   // shared handle: refcount bump, no tree copy
 
     auto el = std::make_shared<const maya::Element>(
         maya::AgentTimeline{
             agent_timeline_config(tool_calls, spinner_frame, rail_color)}.build());
     g_panel_cache.with([&](PanelElementCache& c) { c.put(key, el); });
-    return maya::Element{el};
+    return el;
 }
 
 maya::Element agent_timeline_element_memoized(std::string_view msg_id,
@@ -903,7 +903,7 @@ maya::Element agent_timeline_element_memoized(std::string_view msg_id,
             const std::shared_ptr<const maya::Element>* p = c.get(msg_id, render_key);
             return p ? *p : std::shared_ptr<const maya::Element>{};
         }))
-        return maya::Element{hit};   // shared handle: refcount bump
+        return hit;   // shared handle: refcount bump
 
     // Miss: build via the content-addressed path (which itself hits
     // g_panel_cache across sub-turns with identical batch bytes, e.g.
@@ -915,7 +915,7 @@ maya::Element agent_timeline_element_memoized(std::string_view msg_id,
         agent_timeline_element(tool_calls, spinner_frame, rail_color));
     g_panel_render_memo.with(
         [&](PanelRenderMemo& c) { c.put(msg_id, render_key, el); });
-    return maya::Element{el};
+    return el;
 }
 
 } // namespace agentty::ui

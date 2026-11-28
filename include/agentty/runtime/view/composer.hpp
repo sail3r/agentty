@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/composer.hpp>
+#include <maya/widget/agentty/composer.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

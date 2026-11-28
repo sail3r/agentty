@@ -33,9 +33,9 @@
 
 #include "agtest.hpp"
 
-#include <maya/widget/panel/context.hpp>
-#include <maya/widget/panel/item/slider.hpp>
-#include <maya/widget/panel/theme.hpp>
+#include <maya/widget/agentty/panel/context.hpp>
+#include <maya/widget/agentty/panel/item/slider.hpp>
+#include <maya/widget/agentty/panel/theme.hpp>
 
 #include <maya/text/unicode_width.hpp>
 

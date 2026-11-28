@@ -10,7 +10,7 @@
 #include <string>
 
 #include <maya/print.hpp>
-#include <maya/widget/panel.hpp>
+#include <maya/widget/agentty/panel.hpp>
 
 #include "agentty/runtime/panel/form_keys.hpp"
 #include "agentty/runtime/panel/rag.hpp"

@@ -48,7 +48,7 @@
 
 #include <maya/maya.hpp>
 #include <maya/print.hpp>
-#include <maya/widget/markdown.hpp>
+#include <maya/widget/agentty/markdown.hpp>
 
 using namespace agentty;
 using namespace std::chrono;

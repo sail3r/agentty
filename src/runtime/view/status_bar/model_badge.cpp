@@ -1,6 +1,6 @@
 #include "agentty/runtime/view/status_bar/model_badge.hpp"
 
-#include <maya/widget/model_badge.hpp>
+#include <maya/widget/agentty/model_chip.hpp>
 
 #include <string>
 
@@ -12,9 +12,11 @@
 
 namespace agentty::ui {
 
-maya::Element model_badge_config(const Model& m) {
-    using namespace maya;
-    using namespace maya::dsl;
+maya::Element model_badge_config(const Model& m, std::string trailing) {
+    using Chip = maya::ModelChip;
+    Chip::Config chip;
+    chip.muted    = muted;
+    chip.trailing = std::move(trailing);
 
     // While a Smart Mode turn is in flight the badge names the model ACTUALLY
     // serving it (m.s.smart_turn_model), not the picker selection: under
@@ -36,7 +38,7 @@ maya::Element model_badge_config(const Model& m) {
     // could not distinguish Opus 4.5 from 4.8. The `· 1M` annotation is the
     // one thing shed here, because the composer footer is width-tight and the
     // picker (which shows `full()`) is where you choose a context variant.
-    maya::ModelBadge mb{{
+    chip.badge = maya::ModelBadge::Config{
         .label    = name.medium(),
         .version  = {},          // already folded into medium()
         .color    = name.color,
@@ -44,7 +46,7 @@ maya::Element model_badge_config(const Model& m) {
         // chip, and a status dot in front of it would be a third competing
         // marker in a ~15-column span.
         .show_dot = false,
-    }};
+    };
 
     // Provider prefix: a filled tab chip, "[ Anthropic ] Opus 4.8".
     //
@@ -87,7 +89,8 @@ maya::Element model_badge_config(const Model& m) {
     if (const auto* pa = m.d.auth.find(active_sel.catalog_id());
         pa && pa->accounts.size() > 1 && !pa->active_account.empty())
         prov += " \xc2\xb7 " + pa->active_account;
-    const Style prov_style = ui::chip_style(name.color).with_bold();
+    chip.provider       = prov;
+    chip.provider_style = ui::chip_style(name.color).with_bold();
 
     // First-run honesty. If the user escaped out of the login modal (or
     // launched for the first time with no env-var credentials), the active
@@ -115,11 +118,10 @@ maya::Element model_badge_config(const Model& m) {
         // have. The provider name stays so the user can see which store
         // the next `login` paste would route to; it's rendered with the
         // muted hue, same as every other "disabled, actionable" chip.
-        const Style unauth_prov =
-            ui::chip_style(muted).with_bold();
-        return h(text(" " + prov + " ", unauth_prov),
-                 text(" "),
-                 text("\xe2\x80\x94 sign in", fg_dim(muted))).build();
+        chip.state          = Chip::State::SignedOut;
+        chip.provider_style = ui::chip_style(muted).with_bold();
+        chip.note           = "\xe2\x80\x94 sign in";
+        return Chip{std::move(chip)}.build();
     }
 
     // Reasoning-effort chip: when a tier is active AND the model can reason,
@@ -134,16 +136,14 @@ maya::Element model_badge_config(const Model& m) {
     // nowhere else. It carries the accent and the tier stays muted: the
     // chip then reads as a footnote on the model rather than a third peer
     // in the row, and the two are no longer glued into one "◇xhigh" word.
-    Element effort_chip = text("");
     const auto chip_caps = model.empty() ? ModelCapabilities{} : resolved_caps(model);
     // The pick clamped to this model: off on a model that always thinks
     // shows its floor, and an unsupported tier shows what's sent.
     const Effort shown = model.empty() ? Effort::None : clamp_effort(m.d.effort, chip_caps);
     if (shown != Effort::None) {
         const auto& caps = chip_caps;
-        if (effort_capable(caps))
-            effort_chip = h(text("  "),
-                            text("\xe2\x9c\xa6 ", fg_of(ui::role_brand)),
+        if (effort_capable(caps)) {
+            chip.effort_sigil = ui::role_brand;
                             // NOT fg_dim(muted). muted is already the
                             // palette's grey (bright_black), and dimming it
                             // again lands the tier a hair off the
@@ -153,8 +153,8 @@ maya::Element model_badge_config(const Model& m) {
                             // The sigil keeps the accent and carries the
                             // eye; the tier only has to be READABLE once
                             // the eye arrives, so plain muted is the floor.
-                            text(std::string{effort_label(shown)},
-                                 fg_of(muted))).build();
+            chip.effort = std::string{effort_label(shown)};
+        }
     }
 
     if (model.empty() || name.name.empty()) {
@@ -167,13 +167,14 @@ maya::Element model_badge_config(const Model& m) {
         // chip is the whole truth there. A hosted/local backend mid-fetch is
         // DIFFERENT: a model is coming, and saying so turns a blank that
         // looks broken into a state that looks in progress.
-        if (active_sel.kind == provider::Kind::ExternalAcp)
-            return text(" " + prov + " ", prov_style);
-        return h(text(" " + prov + " ", prov_style),
-                 text(" "),
-                 text(m.s.models_loading ? "loading models\xe2\x80\xa6"
-                                         : "no model \xc2\xb7 ^/ to pick",
-                      fg_dim(muted))).build();
+        if (active_sel.kind == provider::Kind::ExternalAcp) {
+            chip.state = Chip::State::ProviderOnly;
+            return Chip{std::move(chip)}.build();
+        }
+        chip.state = Chip::State::NoModel;
+        chip.note  = m.s.models_loading ? "loading models\xe2\x80\xa6"
+                                        : "no model \xc2\xb7 ^/ to pick";
+        return Chip{std::move(chip)}.build();
     }
 
     // Update chip: when a newer release is known (background check), a
@@ -186,24 +187,20 @@ maya::Element model_badge_config(const Model& m) {
     // download writes a new binary but this process keeps running the old
     // one, so "updated" is only half true; the restart is the outstanding
     // step and it needs a marker that outlives the status line.
-    Element update_chip = text("");
-    if (!m.s.update_pending_restart.empty())
-        update_chip = text("  \xe2\x86\xba v" + m.s.update_pending_restart,
-                           fg_of(ui::status_warn));
-    else if (!m.s.update_latest.empty())
-        update_chip = text("  \xe2\xac\x86 v" + m.s.update_latest,
-                           fg_of(ui::status_ok));
+    if (!m.s.update_pending_restart.empty()) {
+        chip.update       = "\xe2\x86\xba v" + m.s.update_pending_restart;
+        chip.update_color = ui::status_warn;
+    } else if (!m.s.update_latest.empty()) {
+        chip.update       = "\xe2\xac\x86 v" + m.s.update_latest;
+        chip.update_color = ui::status_ok;
+    }
 
     // One UNFILLED space between the chip and the model. The chip's own
     // trailing space is background-filled, so it reads as part of the chip
     // (its right padding), not as separation — dropping this separator left
     // the two words visually touching. The gap has to be outside the fill to
     // be a gap.
-    return h(text(" " + prov + " ", prov_style),
-             text(" "),
-             mb.build(),
-             std::move(effort_chip),
-             std::move(update_chip)).build();
+    return Chip{std::move(chip)}.build();
 }
 
 } // namespace agentty::ui

@@ -28,12 +28,11 @@
 #include <string_view>
 #include <utility>
 
-#include <maya/dsl.hpp>
 #include <maya/render/cache_id.hpp>
-#include <maya/widget/activity_indicator.hpp>
-#include <maya/widget/conversation.hpp>
-#include <maya/widget/permission.hpp>
-#include <maya/widget/turn.hpp>
+#include <maya/widget/agentty/activity_indicator.hpp>
+#include <maya/widget/agentty/conversation.hpp>
+#include <maya/widget/agentty/permission.hpp>
+#include <maya/widget/agentty/turn.hpp>
 
 #include "agentty/runtime/view/palette.hpp"
 #include "agentty/runtime/view/helpers.hpp"   // ui::reasoning_shown
@@ -188,7 +187,6 @@ void build_live_tail(const Model& m, int& running_turn,
             const bool show_indicator = reserve_slot && tail_is_empty_placeholder
                                         && !reasoning_shown(tail);
             if (show_indicator) {
-                using namespace maya::dsl;
                 maya::ActivityIndicator::Config ind;
                 ind.edge_color    = cfg.rail_color;
                 ind.spinner_glyph = std::string{m.s.spinner.current_frame()};

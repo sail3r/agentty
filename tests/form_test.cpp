@@ -14,7 +14,7 @@
 #include <doctest/doctest.h>
 
 #include <maya/print.hpp>
-#include <maya/widget/panel/caret.hpp>
+#include <maya/widget/agentty/panel/caret.hpp>
 
 #include "agentty/runtime/panel/form.hpp"
 #include "agentty/runtime/panel/form_keys.hpp"

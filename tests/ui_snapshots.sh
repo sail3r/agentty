@@ -34,6 +34,7 @@ chrome|--chrome
 prose|--prose
 welcome|--welcome
 panels|--panels
+all-panels|--all-panels
 agents|--agents
 viewer-agent|--viewer-agent
 native|--kind typical edit grep

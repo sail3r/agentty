@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/conversation.hpp>
+#include <maya/widget/agentty/conversation.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

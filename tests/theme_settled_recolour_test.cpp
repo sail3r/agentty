@@ -56,7 +56,7 @@
 #include <maya/maya.hpp>
 #include <maya/style/schemes.hpp>
 #include <maya/style/theme.hpp>
-#include <maya/widget/markdown.hpp>
+#include <maya/widget/agentty/markdown.hpp>
 
 #include "agentty/domain/ui_theme.hpp"
 

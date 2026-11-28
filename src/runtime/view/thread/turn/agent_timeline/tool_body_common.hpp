@@ -16,7 +16,7 @@
 #include <string>
 #include <string_view>
 
-#include <maya/widget/tool_body_preview.hpp>
+#include <maya/widget/agentty/tool_body_preview.hpp>
 
 #include "agentty/domain/conversation.hpp"
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_body_preview.hpp"  // GrepHits

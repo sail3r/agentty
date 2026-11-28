@@ -14,10 +14,10 @@
 #include <string>
 #include <utility>
 
-#include <maya/widget/agent_timeline.hpp>
-#include <maya/widget/markdown.hpp>
-#include <maya/widget/thinking.hpp>  // reasoning/thinking block
-#include <maya/widget/reasoning.hpp>  // ReasoningStream (streaming reasoning block)
+#include <maya/widget/agentty/agent_timeline.hpp>
+#include <maya/widget/agentty/markdown.hpp>
+#include <maya/widget/agentty/reasoning.hpp>  // ReasoningStream (streaming reasoning block)
+#include <maya/widget/agentty/line.hpp>
 #include "agentty/domain/ui_live.hpp"  // motion / thinking / prose-width prefs
 #include <maya/core/render_context.hpp> // available_height (resize-shrink detect)
 #include <maya/core/anim_clock.hpp>     // maya::anim_now_ms (deterministic under a test clock)
@@ -108,9 +108,7 @@ inline MessageId md_slot_id(const MessageId& mid, MdView view) {
 // structured output whose columns mean something, so squeezing them to a
 // prose measure would be actively worse.
 [[nodiscard]] maya::Element prose_capped(maya::Element body) {
-    using namespace maya::dsl;
     const int cap = agentty::ui_prefs::current().prose_width;
-    if (cap <= 0) return body;
     // Constrain the column the markdown lays out into, and let a trailing
     // flexible cell absorb the remainder. Left-aligned rather than centred:
     // the rail, the glyph and every turn above start at the left margin,
@@ -121,7 +119,7 @@ inline MessageId md_slot_id(const MessageId& mid, MdView view) {
     // auto-width chain (Conversation → Turn → body): a terminal narrower
     // than the cap gives the flex row less than `cap` to divide, and the
     // fixed cell shrinks with it rather than overflowing.
-    return h(v(std::move(body)) | width(cap), v() | grow_<1>).build();
+    return maya::Conversation::prose_capped(std::move(body), cap);
 }
 
 maya::Element cached_markdown_for(const Message& msg, const Model& m,
@@ -2044,7 +2042,6 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
     // parent transcript is readable on demand. The model still receives
     // msg.text in full on the wire (it's a real User message, not elided).
     if (msg.fork_note) {
-        using namespace maya::dsl;
         cfg.glyph      = "\xe2\x91\x83";              // ⑃
         cfg.label      = "Forked";
         cfg.rail_color = status_info;
@@ -2066,12 +2063,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
             };
             push("prior transcript \xc2\xb7 ", maya::Style{}.with_fg(muted));
             push(msg.fork_transcript, maya::Style{}.with_fg(code_path));
-            cfg.body.emplace_back(maya::Turn::BodySlot{maya::Element{maya::TextElement{
-                .content = std::move(content),
-                .style   = {},
-                .wrap    = maya::TextWrap::TruncateEnd,
-                .runs    = std::move(runs),
-            }}});
+            cfg.body.emplace_back(maya::Turn::BodySlot{maya::Line::clipped(std::move(content), std::move(runs)).build()});
         }
         return cfg;
     }
@@ -2083,7 +2075,6 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
     // marks it as an orchestration event, not a real turn. The actual
     // subagent delegations render as ordinary `task` tool cards.
     if (msg.smart_routing) {
-        using namespace maya::dsl;
         cfg.glyph      = "\xf0\x9f\xa7\xa0";          // 🧠
         cfg.label      = "Smart Mode";
         cfg.rail_color = accent;                       // purple/accent axis
@@ -2118,12 +2109,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
                 push("   ", maya::Style{});
                 push(msg.smart_route_note, maya::Style{}.with_fg(muted).with_italic());
             }
-            cfg.body.emplace_back(maya::Turn::BodySlot{maya::Element{maya::TextElement{
-                .content = std::move(content),
-                .style   = {},
-                .wrap    = maya::TextWrap::TruncateEnd,
-                .runs    = std::move(runs),
-            }}});
+            cfg.body.emplace_back(maya::Turn::BodySlot{maya::Line::clipped(std::move(content), std::move(runs)).build()});
         }
 
         // Line 2: active layers as compact chips.
@@ -2140,12 +2126,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
             };
             chip("orchestrate", msg.smart_route_orchestrate);
             chip("subagents",   msg.smart_route_subagents);
-            cfg.body.emplace_back(maya::Turn::BodySlot{maya::Element{maya::TextElement{
-                .content = std::move(content),
-                .style   = {},
-                .wrap    = maya::TextWrap::TruncateEnd,
-                .runs    = std::move(runs),
-            }}});
+            cfg.body.emplace_back(maya::Turn::BodySlot{maya::Line::clipped(std::move(content), std::move(runs)).build()});
         }
         return cfg;
     }
@@ -2316,7 +2297,6 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
         // fully responsive: narrow terminals ellipsize the tally tail,
         // wide ones show it whole, and the gauge+percent always survive.
         {
-            using namespace maya::dsl;
             // The meta strip is built as a SINGLE TextElement with per-segment
             // color runs, rendered TextWrap::TruncateEnd. A single truncating
             // text node is GUARANTEED to occupy exactly one row at any width:
@@ -2390,12 +2370,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
                 push(shown_n == 1 ? "passage" : "passages", maya::Style{}.with_fg(muted));
             }
 
-            cfg.meta_element = maya::Element{maya::TextElement{
-                .content = std::move(meta),
-                .style   = {},
-                .wrap    = maya::TextWrap::TruncateEnd,
-                .runs    = std::move(mruns),
-            }};
+            cfg.meta_element = maya::Line::clipped(std::move(meta), std::move(mruns)).build();
         }
 
         // Body = pure provenance, one dense line per distinct source:
@@ -2407,7 +2382,6 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
         // The snippet trails in quotes so you see the CONTENT that grounded
         // the answer, all on ONE row. Capped; overflow → "… N more".
         {
-            using namespace maya::dsl;
             constexpr std::size_t kMaxSources = 5;
             const std::size_t total = sources.size();
             const bool expanded = pc->expanded;
@@ -2418,7 +2392,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
             // makes maya see a single block → the rows sit flush against each
             // other, and the one inter-slot gap only separates this whole
             // provenance block from the meta/affordance around it.
-            std::vector<maya::Element> rows;
+            std::vector<maya::Line> rows;
             for (std::size_t i = 0; i < sources.size() && i < kMaxSources; ++i) {
                 const Src& s = sources[i];
                 std::string kindpart = s.kind + " \xc2\xb7 ";     // "docs · "
@@ -2450,12 +2424,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
                         push("  ", maya::Style{}.with_fg(muted));
                         push(preview, maya::Style{}.with_fg(muted));
                     }
-                    return maya::Element{maya::TextElement{
-                        .content = std::move(content),
-                        .style = {},
-                        .wrap = maya::TextWrap::TruncateEnd,
-                        .runs = std::move(runs),
-                    }};
+                    return maya::Line::clipped(std::move(content), std::move(runs));
                 };
 
                 if (expanded) {
@@ -2476,17 +2445,13 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
                 }
             }
             if (total > kMaxSources) {
-                rows.push_back(maya::Element{maya::TextElement{
-                    .content = "  \xe2\x80\xa6 " + std::to_string(total - kMaxSources)
+                rows.push_back(maya::Line::clipped("  \xe2\x80\xa6 " + std::to_string(total - kMaxSources)
                              + " more source"
-                             + (total - kMaxSources == 1 ? "" : "s"),
-                    .style = maya::Style{}.with_fg(muted),
-                    .wrap = maya::TextWrap::TruncateEnd,
-                }});
+                             + (total - kMaxSources == 1 ? "" : "s"), {}, maya::Style{}.with_fg(muted)));
             }
             if (!rows.empty()) {
                 cfg.body.emplace_back(maya::Turn::BodySlot{
-                    maya::detail::vstack().gap(0)(std::move(rows)).build()});
+                    maya::Line::stack(std::move(rows))});
             }
             // Affordance footer — only when there's a full body worth
             // expanding to. Tells the user the toggle exists and what it
@@ -2500,11 +2465,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
                     ? "  ^U collapse"
                     : "  ^U expand full passages";
                 cfg.body.emplace_back(maya::Turn::BodySlot{
-                    maya::Element{maya::TextElement{
-                        .content = affordance,
-                        .style = maya::Style{}.with_fg(status_info),
-                        .wrap = maya::TextWrap::TruncateEnd,
-                    }}});
+                    maya::Line::clipped(affordance, {}, maya::Style{}.with_fg(status_info)).build()});
             }
         }
         return cfg;

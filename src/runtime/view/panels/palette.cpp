@@ -9,7 +9,7 @@ namespace agentty::ui {
 
 Element palette_panel(const Model& m) {
     auto* o = m.ui.panel.get<pn::Palette>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     // Live visibility context — literally the same function the reducer uses,
     // so a row the dispatcher would reject never renders (no dead Accept-all)
@@ -32,7 +32,7 @@ Element palette_panel(const Model& m) {
         filter_header(o->query, {}, highlight, "\xe2\x8c\x98 "));   // ⌘
     // Rule under the filter — the same `sep` every other picker draws, so the
     // query box is separated from its results identically everywhere.
-    cfg.header.push_back(sep);
+    cfg.header.push_back(maya::Line::rule());
 
     // Each category owns a hue so the flat list reads as coloured bands; the
     // badge keeps its hue on the selected row (Picker contract), so the
@@ -51,10 +51,8 @@ Element palette_panel(const Model& m) {
     };
 
     if (matches.empty()) {
-        cfg.prebuilt.push_back(text(
-            o->query.empty() ? "  no commands available"
-                             : "  no command matches \"" + o->query + "\"",
-            fg_italic(muted)));
+        cfg.prebuilt.push_back(maya::Line{o->query.empty() ? "  no commands available"
+                             : "  no command matches \"" + o->query + "\"", fg_italic(muted)});
     } else {
         cfg.items.reserve(matches.size() + 6);
         // On the EMPTY query we render real SECTION HEADERS between category
@@ -127,13 +125,11 @@ Element palette_panel(const Model& m) {
         cfg.selected = sel_display;
     }
 
-    cfg.footer.push_back(text(""));
+    cfg.footer.push_back(maya::Line::blank());
     // Count anchor when the list is scrolled — same grammar as the @ / # pickers.
     if (static_cast<int>(matches.size()) > kViewportH) {
-        cfg.footer.push_back(text(
-            "  " + std::to_string(o->index + 1) + "/"
-                + std::to_string(matches.size()) + " commands",
-            fg_dim(muted)));
+        cfg.footer.push_back(maya::Line{"  " + std::to_string(o->index + 1) + "/"
+                + std::to_string(matches.size()) + " commands", fg_dim(muted)});
     }
     cfg.footer.push_back(key_hints({
         {"\xe2\x86\x91\xe2\x86\x93", "move", 5},   // ↑↓

@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/permission.hpp>
+#include <maya/widget/agentty/permission.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

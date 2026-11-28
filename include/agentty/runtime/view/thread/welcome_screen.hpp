@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/welcome_screen.hpp>
+#include <maya/widget/agentty/welcome_screen.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

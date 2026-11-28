@@ -44,7 +44,7 @@
 #include <cstdlib>   // setenv
 #include <thread>
 
-#include <maya/widget/markdown.hpp>   // maya::StreamingMarkdown
+#include <maya/widget/agentty/markdown.hpp>   // maya::StreamingMarkdown
 
 #include "agentty/runtime/app/program.hpp"
 #include "agentty/runtime/app/update/internal.hpp"

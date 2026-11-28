@@ -58,10 +58,10 @@ const store::RagConfig& defaults() {
 // so a caller that needs to know can answer honestly rather than hand back a
 // default that reads like real data.
 template <class C, class Visit>
-bool with_slot(C& c, const SettingDef& d, Visit&& v) {
+bool with_slot(C& c, const SettingDef& d, Visit&& visit) {
     return std::visit([&](auto member) -> bool {
         if constexpr (requires { c.*member; }) {
-            v(c.*member);
+            visit(c.*member);
             return true;
         } else {
             return false;

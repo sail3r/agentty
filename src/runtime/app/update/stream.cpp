@@ -38,7 +38,7 @@
 #include "agentty/tool/hooks.hpp"   // has_pre_tool: no speculative start past a hook
 #include "agentty/tool/skills.hpp"   // active_in: derived "already active" set
 #include "agentty/tool/tool.hpp"   // DynamicDispatch::needs_permission (speculative dispatch)
-#include <maya/widget/markdown.hpp>
+#include <maya/widget/agentty/markdown.hpp>
 #include "agentty/tool/util/partial_json.hpp"
 
 namespace agentty::app::detail {

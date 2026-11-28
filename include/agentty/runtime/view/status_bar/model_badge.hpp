@@ -1,4 +1,6 @@
 #pragma once
+#include <string>
+
 #include <maya/element/element.hpp>
 #include "agentty/runtime/model.hpp"
 
@@ -13,6 +15,7 @@ namespace agentty::ui {
 // belongs next to the thing you type into, where it also stops competing
 // with the phase chip for the shed budget. Returns a built Element (composed
 // here rather than via the single-string widget so it can carry both facts).
-[[nodiscard]] maya::Element model_badge_config(const Model& m);
+// `trailing`: a dim note after the chip ("  ↵ queues"), what Enter will do.
+[[nodiscard]] maya::Element model_badge_config(const Model& m, std::string trailing = {});
 
 } // namespace agentty::ui

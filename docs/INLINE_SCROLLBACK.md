@@ -80,7 +80,7 @@ the failure mode if you undo it.
 **Pin location.**
 - agentty: `maya::run<AgenttyApp>({.mode = Mode::Inline, …})` —
   set in `main.cpp`.
-- maya: `include/maya/widget/app_layout.hpp`.
+- maya: `include/maya/widget/agentty/app_layout.hpp`.
 
 **Required shape (the only correct one for inline mode):**
 
@@ -190,7 +190,7 @@ All three call `gap_row()` — defined ONCE in
 builder and the live-tail builder; the pre-seam byte-identical copies
 guarded by "MUST stay identical" comments are gone) — which forwards
 to `maya::Conversation::divider()` (defined in
-`third_party/maya/include/maya/widget/conversation.hpp`). That static
+`third_party/maya/include/maya/widget/agentty/conversation.hpp`). That static
 function returns a width-aware indented `─` rule with a fixed
 `hash_id` of `"maya.conversation.divider"`.
 
@@ -688,12 +688,12 @@ that pin from this doc.
 
 | Concern                                      | File                                                            |
 |----------------------------------------------|------------------------------------------------------------------|
-| Mode + outer layout                          | `third_party/maya/include/maya/widget/app_layout.hpp`                       |
+| Mode + outer layout                          | `third_party/maya/include/maya/widget/agentty/app_layout.hpp`                       |
 | Borrowed frozen prefix wiring                | `src/runtime/view/thread/conversation.cpp`                       |
 | Frozen builder + trim                        | `src/runtime/app/update/frozen.cpp`                              |
 | ScrollbackLedger + ScrollbackDebt            | `third_party/maya/include/maya/render/scrollback_ledger.hpp`                 |
 | Freeze-seam row builders (ONE definition)    | `include/agentty/runtime/view/thread/seam.hpp`                   |
-| Divider source of truth                      | `third_party/maya/include/maya/widget/conversation.hpp` (`divider_rule`)    |
+| Divider source of truth                      | `third_party/maya/include/maya/widget/agentty/conversation.hpp` (`divider_rule`)    |
 | `needs_warmup_render` field                  | `include/agentty/runtime/model.hpp`                              |
 | `needs_warmup_render` set                    | `src/runtime/app/update/picker.cpp` (`ThreadLoaded`)             |
 | `needs_warmup_render` clear                  | `src/runtime/app/update.cpp` (top of `update`)                   |

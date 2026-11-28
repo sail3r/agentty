@@ -12,8 +12,7 @@
 #include "agentty/runtime/settings_registry.hpp"
 #include "agentty/runtime/view/palette.hpp"
 
-#include <maya/dsl.hpp>
-#include <maya/element/builder.hpp>
+#include <maya/widget/agentty/report.hpp>
 #include <maya/print.hpp>
 #include <maya/style/theme.hpp>
 #include <maya/terminal/ansi.hpp>
@@ -40,7 +39,12 @@ namespace agentty::paste_cli {
 
 namespace reg = settings::registry;
 using maya::Element;
-using namespace maya::dsl;
+using maya::report::words;
+using maya::report::fixed;
+using maya::report::row;
+using maya::report::line;
+using maya::report::indent;
+using maya::report::stack;
 
 namespace {
 
@@ -85,46 +89,14 @@ void emit(const Element& e, FILE* f = stdout) {
     std::fputs(out.c_str(), f);
 }
 
-Element blank() { return text(""); }
-Element title(std::string s) { return text(std::move(s), ui::fg_bold(ui::accent)); }
-Element heading(std::string s) { return text(std::move(s), ui::fg_bold(ui::fg)); }
-Element dim(std::string s) { return text(std::move(s), ui::fg_dim(ui::muted)); }
-Element ok(std::string s) { return text(std::move(s), ui::fg_bold(ui::status_ok)); }
-Element warn(std::string s) { return text(std::move(s), ui::fg_bold(ui::status_warn)); }
-Element bad(std::string s) { return text(std::move(s), ui::fg_bold(ui::status_error)); }
-Element code(std::string s) { return text(std::move(s), maya::Style{}.with_fg(ui::accent)); }
-
-Element fixed(Element e, int w) {
-    auto box = maya::hstack();
-    box.width(maya::Dimension::fixed(w));
-    box.min_width(maya::Dimension::fixed(w));
-    box.max_width(maya::Dimension::fixed(w));
-    return box(std::move(e));
-}
-
-// A label in a fixed gutter and its value wrapping beside it.
-Element row(Element label, Element value, int gutter) {
-    auto right = maya::hstack();
-    right.grow();
-    auto r = maya::hstack();
-    return r(fixed(std::move(label), gutter), right(std::move(value)));
-}
-
-Element line(std::vector<Element> parts) {
-    auto h = maya::hstack();
-    h.gap(1);
-    return h(std::move(parts));
-}
-
-Element indent(Element e, int n = 2) {
-    auto h = maya::hstack();
-    return h(fixed(text(""), n), std::move(e));
-}
-
-Element stack(std::vector<Element> rows) {
-    auto v = maya::vstack();
-    return v(std::move(rows));
-}
+Element gap() { return maya::report::blank(); }
+Element title(std::string s) { return words(std::move(s), ui::fg_bold(ui::accent)); }
+Element heading(std::string s) { return words(std::move(s), ui::fg_bold(ui::fg)); }
+Element dim(std::string s) { return words(std::move(s), ui::fg_dim(ui::muted)); }
+Element ok(std::string s) { return words(std::move(s), ui::fg_bold(ui::status_ok)); }
+Element warn(std::string s) { return words(std::move(s), ui::fg_bold(ui::status_warn)); }
+Element bad(std::string s) { return words(std::move(s), ui::fg_bold(ui::status_error)); }
+Element code(std::string s) { return words(std::move(s), maya::Style{}.with_fg(ui::accent)); }
 
 const char* dot() { return "\xc2\xb7"; }   // ·
 
@@ -132,27 +104,27 @@ const char* dot() { return "\xc2\xb7"; }   // ·
 
 int help() {
     constexpr int g = 26;
-    auto cmd = [&](std::string name, std::string what) { return row(indent(code(std::move(name))), text(std::move(what)), g); };
+    auto cmd = [&](std::string name, std::string what) { return row(indent(code(std::move(name))), words(std::move(what)), g); };
     emit(stack({
              line({title("agentty paste"), dim(dot()), dim("images, files and text into agentty, even over ssh and tmux")}),
-             blank(),
-             text("In the composer, Ctrl+V does all of this for you. These commands set it up and show what it sees."),
-             blank(),
+             gap(),
+             words("In the composer, Ctrl+V does all of this for you. These commands set it up and show what it sees."),
+             gap(),
              heading("on the machine you type on"),
              cmd("setup", "add the ssh hook to ~/.ssh/config and start the agent (once)"),
              cmd("agent", "run the clipboard agent in the foreground"),
-             blank(),
+             gap(),
              heading("anywhere"),
              cmd("doctor", "show which routes paste would use, and try one"),
              cmd("paste [-o DIR]", "print the clipboard: text as is, images and files saved, their paths printed"),
              cmd("config", "list and set the paste settings (Settings \xe2\x86\x92 Paste)"),
-             blank(),
+             gap(),
              heading("when nothing reaches your clipboard (Terminal.app over ssh)"),
              cmd("howto", "one-time Mac or Windows setup to paste images as text"),
              cmd("page > paste.html", "a web page that turns a pasted image into one line of text"),
              cmd("encode FILE", "FILE as one line of text; paste it anywhere"),
              cmd("decode [DIR]", "turn such text on stdin back into files"),
-             blank(),
+             gap(),
              dim("Pasting an image as text also works in the browser, nothing to install: agentty.org/paste"),
          }),
          stderr);
@@ -214,32 +186,32 @@ int doctor() {
     auto onoff = [](bool b) { return b ? std::string{"on"} : std::string{"off"}; };
 
     rows.push_back(line({title("agentty paste doctor")}));
-    rows.push_back(blank());
+    rows.push_back(gap());
 
     // Where we are decides the plan, so say that first.
     rows.push_back(heading("where you are"));
     std::string where = d.situation.ssh ? "over ssh" : "on this machine";
     if (d.tmux) where += d.situation.tmux ? ", in a tmux pane" : ", tmux set but not answering";
-    kv("session", text(where));
+    kv("session", words(where));
     {
         using I = rp::Images;
         const auto im = d.situation.images;
         kv("terminal", im == I::yes ? ok("can send images (kitty)")
-                     : im == I::no ? text("text only") : dim("unknown, asked when needed"));
+                     : im == I::no ? words("text only") : dim("unknown, asked when needed"));
     }
     if (d.situation.ssh && d.ssh_connection) kv("ssh", dim(*d.ssh_connection));
     std::string disp;
     if (d.wayland_display) disp += "wayland " + *d.wayland_display;
     if (d.x_display) disp += (disp.empty() ? "" : ", ") + std::string{"x11 "} + *d.x_display;
     if (disp.empty() && d.paste && d.paste->route == rp::Route::display) disp = d.paste->source + " (found, not in env)";
-    kv("display", disp.empty() ? dim("none") : text(disp));
+    kv("display", disp.empty() ? dim("none") : words(disp));
     {
         std::size_t live = std::ranges::count_if(d.forwards, [](auto& f) { return f.live; });
         std::string f = d.forwards.empty() ? "none" : std::format("{} live, {} stale", live, d.forwards.size() - live);
-        kv("ssh forwards", d.forwards.empty() || live == 0 ? dim(f) : text(f));
+        kv("ssh forwards", d.forwards.empty() || live == 0 ? dim(f) : words(f));
     }
     kv("local agent", d.agent_alive ? ok("running") : dim("not running"));
-    rows.push_back(blank());
+    rows.push_back(gap());
 
     // The plan, with each route's outcome if this paste reached it.
     rows.push_back(heading("routes, in order"));
@@ -259,14 +231,14 @@ int doctor() {
                 const bool final = d.paste.error().route == r;
                 mark = final ? bad("\xe2\x9c\x97") : warn("\xe2\x80\x93");   // ✗ / –
                 detail.push_back(indent(dim(first_line(e->what)), g + 2));
-                if (auto h = route_hint(*e); !h.empty()) detail.push_back(indent(text("\xe2\x86\x92 " + h), g + 2));
+                if (auto h = route_hint(*e); !h.empty()) detail.push_back(indent(words("\xe2\x86\x92 " + h), g + 2));
                 if (final) reached_end = true;
             }
         }
-        rows.push_back(row(indent(line({std::move(mark), text(route_label(r))})), dim(route_what(r)), g + 2));
+        rows.push_back(row(indent(line({std::move(mark), words(route_label(r))})), dim(route_what(r)), g + 2));
         for (auto& x : detail) rows.push_back(std::move(x));
     }
-    rows.push_back(blank());
+    rows.push_back(gap());
 
     // The result.
     if (d.paste) {
@@ -280,7 +252,7 @@ int doctor() {
                                               [](const auto&) { return std::string{"item"}; },
                                           },
                                           it);
-            rows.push_back(indent(line({text(what), dim(dot()), text(rp::human_size(data.size())), dim(dot()),
+            rows.push_back(indent(line({words(what), dim(dot()), words(rp::human_size(data.size())), dim(dot()),
                                         dim("sha256 " + rp::hex(rp::sha256(data)).substr(0, 12))})));
         }
     } else {
@@ -288,15 +260,15 @@ int doctor() {
         const bool empty = e.code == rp::Code::empty;
         rows.push_back(empty ? line({warn("clipboard is empty"), dim("copy something and run this again")})
                              : line({bad("\xe2\x9c\x97 paste can't reach your clipboard")}));
-        if (!empty && e.causes.empty()) rows.push_back(indent(text(first_line(e.what))));
+        if (!empty && e.causes.empty()) rows.push_back(indent(words(first_line(e.what))));
         if (e.code == rp::Code::no_route || e.code == rp::Code::needs_terminal) {
-            rows.push_back(blank());
-            rows.push_back(text(d.situation.ssh ? "Fix: run `agentty paste setup` on your laptop and reconnect. For images "
+            rows.push_back(gap());
+            rows.push_back(words(d.situation.ssh ? "Fix: run `agentty paste setup` on your laptop and reconnect. For images "
                                                   "with nothing installed, copy them from agentty.org/paste."
                                                 : "Fix: run `agentty paste setup` on the machine you type on."));
         }
     }
-    rows.push_back(blank());
+    rows.push_back(gap());
 
     // Settings, compact, last.
     rows.push_back(heading("settings"));
@@ -304,7 +276,7 @@ int doctor() {
                                  onoff(c.display), dot(), onoff(c.server_display), dot(),
                                  rp::terminal_mode_name(c.terminal))));
     kv("max size", dim(rp::human_size(c.max_bytes)));
-    if (!c.socket.empty()) kv("socket", text(c.socket.string() + " (the only route)"));
+    if (!c.socket.empty()) kv("socket", words(c.socket.string() + " (the only route)"));
     kv("saves to", dim(d.save_dir.string()));
     kv("agent", dim(d.agent));
     rows.push_back(dim("change them: agentty paste config, or Settings \xe2\x86\x92 Paste"));
@@ -318,24 +290,24 @@ int doctor() {
 int setup() {
     auto r = rp::setup();
     if (!r) {
-        emit(stack({line({bad("\xe2\x9c\x97 setup failed")}), indent(text(r.error().what))}), stderr);
+        emit(stack({line({bad("\xe2\x9c\x97 setup failed")}), indent(words(r.error().what))}), stderr);
         return 1;
     }
     std::vector<Element> rows;
     using C = rp::SetupReport::Change;
     switch (r->change) {
         case C::unchanged:
-            rows.push_back(line({ok("\xe2\x9c\x93"), text("the ssh hook is already in"), code(r->ssh_config.string())}));
+            rows.push_back(line({ok("\xe2\x9c\x93"), words("the ssh hook is already in"), code(r->ssh_config.string())}));
             break;
         case C::updated:
-            rows.push_back(line({ok("\xe2\x9c\x93"), text("updated the ssh hook in"), code(r->ssh_config.string())}));
+            rows.push_back(line({ok("\xe2\x9c\x93"), words("updated the ssh hook in"), code(r->ssh_config.string())}));
             break;
         case C::added:
-            rows.push_back(line({ok("\xe2\x9c\x93"), text("added the ssh hook to the top of"), code(r->ssh_config.string())}));
+            rows.push_back(line({ok("\xe2\x9c\x93"), words("added the ssh hook to the top of"), code(r->ssh_config.string())}));
             break;
     }
     if (r->change != C::unchanged) {
-        rows.push_back(blank());
+        rows.push_back(gap());
         std::string_view s = r->snippet;
         while (!s.empty()) {
             auto nl = s.find('\n');
@@ -344,9 +316,9 @@ int setup() {
             s.remove_prefix(nl + 1);
         }
     }
-    rows.push_back(line({ok("\xe2\x9c\x93"), text("the clipboard agent is running")}));
-    rows.push_back(blank());
-    rows.push_back(text("New ssh sessions now carry your clipboard. Reconnect, then Ctrl+V in agentty pastes "
+    rows.push_back(line({ok("\xe2\x9c\x93"), words("the clipboard agent is running")}));
+    rows.push_back(gap());
+    rows.push_back(words("New ssh sessions now carry your clipboard. Reconnect, then Ctrl+V in agentty pastes "
                         "images, files and text from this machine."));
     rows.push_back(dim("The server needs agentty too. Nothing else to set up there. Check it with "
                        "`agentty paste doctor` on the server."));
@@ -367,7 +339,7 @@ const reg::SettingDef* find_row(std::string_view key) {
 void list(const paste_cfg::Config& c, const reg::EnvSnapshot& env) {
     std::vector<Element> rows;
     rows.push_back(line({title("paste settings"), dim(dot()), dim("settings.json \"paste\", also in Settings \xe2\x86\x92 Paste")}));
-    rows.push_back(blank());
+    rows.push_back(gap());
     std::size_t key_w = 0;
     for (const auto& d : reg::kSettings)
         if (d.owner() == reg::Owner::Paste) key_w = std::max(key_w, d.id.size() - 6);
@@ -378,11 +350,11 @@ void list(const paste_cfg::Config& c, const reg::EnvSnapshot& env) {
         if (val.empty()) val = "\"\"";
         Element from = dim("default");
         if (auto e = reg::env_override(d, env); !e.empty()) from = warn("from " + e);
-        else if (!reg::is_default(c, d)) from = text("set in settings.json");
-        rows.push_back(row(indent(code(std::string{d.id.substr(6)})), line({text(val, ui::fg_bold(ui::fg)), dim(dot()), std::move(from)}), g));
-        rows.push_back(row(text(""), dim(std::string{d.help}), g));
+        else if (!reg::is_default(c, d)) from = words("set in settings.json");
+        rows.push_back(row(indent(code(std::string{d.id.substr(6)})), line({words(val, ui::fg_bold(ui::fg)), dim(dot()), std::move(from)}), g));
+        rows.push_back(row(words(""), dim(std::string{d.help}), g));
     }
-    rows.push_back(blank());
+    rows.push_back(gap());
     rows.push_back(row(dim("get"), code("agentty paste config get <key>"), 7));
     rows.push_back(row(dim("set"), code("agentty paste config set <key> <value>"), 7));
     rows.push_back(row(dim("reset"), code("agentty paste config reset <key|all>"), 7));
@@ -397,7 +369,7 @@ void list(const paste_cfg::Config& c, const reg::EnvSnapshot& env) {
 }
 
 int fail(std::string msg) {
-    emit(line({bad("agentty paste:"), text(std::move(msg))}), stderr);
+    emit(line({bad("agentty paste:"), words(std::move(msg))}), stderr);
     return 1;
 }
 
@@ -437,7 +409,7 @@ int config(Io io, const maya::unlocked& cap, std::span<const std::string> args) 
             return fail(std::move(m));
         }
         persistence::save_settings(io, cap, s);
-        std::vector<Element> rows{line({ok("\xe2\x9c\x93"), code(std::string{d->id.substr(6)}), text("= " + reg::get(s.paste, *d))})};
+        std::vector<Element> rows{line({ok("\xe2\x9c\x93"), code(std::string{d->id.substr(6)}), words("= " + reg::get(s.paste, *d))})};
         if (auto e = reg::env_override(*d, env); !e.empty())
             rows.push_back(indent(warn(e + " is set, so it still wins over this")));
         emit(stack(std::move(rows)));
@@ -452,7 +424,7 @@ int config(Io io, const maya::unlocked& cap, std::span<const std::string> args) 
             reg::reset(s.paste, *d);
         }
         persistence::save_settings(io, cap, s);
-        emit(line({ok("\xe2\x9c\x93"), text("reset"), code(args[1])}));
+        emit(line({ok("\xe2\x9c\x93"), words("reset"), code(args[1])}));
         return 0;
     }
     return config_usage();

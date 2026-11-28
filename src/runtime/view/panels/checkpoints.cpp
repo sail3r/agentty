@@ -18,7 +18,7 @@ namespace agentty::ui {
 // existing RestoreCheckpoint flow.
 Element checkpoints_panel(const Model& m) {
     auto* o = m.ui.panel.get<pn::Checkpoints>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     // Relative "time ago" from a wall-clock ms stamp — local to the view;
     // no shared helper exists and the grammar here is picker-specific.
@@ -82,10 +82,8 @@ Element checkpoints_panel(const Model& m) {
         cfg.items.push_back(std::move(row));
     }
 
-    cfg.footer.push_back(text(""));
-    cfg.footer.push_back(text(
-        "  Restores files and rewinds the transcript here.",
-        fg_dim(muted)));
+    cfg.footer.push_back(maya::Line::blank());
+    cfg.footer.push_back(maya::Line{"  Restores files and rewinds the transcript here.", fg_dim(muted)});
     cfg.footer.push_back(key_hints({
         {"\xe2\x86\x91\xe2\x86\x93", "move", 5},   // ↑↓
         {"Enter", "rewind", 3},

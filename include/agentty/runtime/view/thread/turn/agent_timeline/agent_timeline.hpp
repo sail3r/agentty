@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <span>
 #include <string_view>
-#include <maya/widget/agent_timeline.hpp>
+#include <maya/widget/agentty/agent_timeline.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

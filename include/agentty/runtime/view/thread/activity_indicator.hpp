@@ -2,7 +2,7 @@
 #include <optional>
 #include <string_view>
 #include <vector>
-#include <maya/widget/activity_indicator.hpp>
+#include <maya/widget/agentty/activity_indicator.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

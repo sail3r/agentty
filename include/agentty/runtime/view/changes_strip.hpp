@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/changes_strip.hpp>
+#include <maya/widget/agentty/changes_strip.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

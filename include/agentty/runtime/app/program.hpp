@@ -13,6 +13,7 @@
 
 #include <maya/core/executor.hpp>
 #include <maya/maya.hpp>
+#include <maya/widget/agentty/conversation.hpp>   // scrollback_wrap
 
 #include "agentty/runtime/app/deps.hpp"
 #include "agentty/runtime/app/subscribe.hpp"
@@ -783,8 +784,7 @@ struct AgenttyApp {
     // padding(0, 1): two columns each side. Replayed history gets the same
     // horizontal padding so its rows land on the exact columns they had.
     static maya::Element scrollback_wrap(maya::Element e) {
-        using namespace maya::dsl;
-        return (v(std::move(e)) | padding(0, 2)).build();
+        return maya::Conversation::scrollback_wrap(std::move(e));
     }
 };
 

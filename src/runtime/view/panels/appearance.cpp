@@ -53,10 +53,10 @@ namespace {
     cfg.selected = win.cursor;
 
     cfg.header.push_back(filter_header(pick.query()));
-    cfg.header.push_back(sep);
+    cfg.header.push_back(maya::Line::rule());
 
     if (visible.empty()) {
-        cfg.prebuilt.push_back(text("  no scheme matches", fg_italic(muted)));
+        cfg.prebuilt.push_back(maya::Line{"  no scheme matches", fg_italic(muted)});
     } else {
         cfg.items.reserve(visible.size());
         for (const std::string* name_p : visible) {
@@ -98,10 +98,8 @@ namespace {
         }
     }
 
-    cfg.footer.push_back(sep);
-    cfg.footer.push_back(text(
-        "  Moving applies it \xe2\x80\x94 you are looking at the preview.",
-        fg_dim(muted)));
+    cfg.footer.push_back(maya::Line::rule());
+    cfg.footer.push_back(maya::Line{"  Moving applies it \xe2\x80\x94 you are looking at the preview.", fg_dim(muted)});
     cfg.footer.push_back(key_hints({
         {"\xe2\x86\x91\xe2\x86\x93", "preview", 5},   // ↑↓
         {"Enter", "keep", 3},
@@ -115,7 +113,7 @@ namespace {
 
 Element appearance_panel(const Model& m) {
     auto* o = m.ui.panel.get<pn::Appearance>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
     if (o->pane.picking) return theme_browser(*o);
     return maya::Panel{form_config(o->pane.form, info,
                                    &m.ui.appearance_scroll,

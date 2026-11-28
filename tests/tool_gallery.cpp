@@ -43,6 +43,9 @@
 #include "agentty/runtime/view/thread/welcome_screen.hpp"
 #include "agentty/runtime/view/panels.hpp"
 #include "agentty/runtime/view/view.hpp"
+#include "agentty/runtime/login.hpp"
+#include "agentty/runtime/panel/settings/categories.hpp"
+#include "agentty/runtime/app/update.hpp"
 #include "agentty/runtime/app/update/internal.hpp"   // collect_viewer_entries
 #include "agentty/runtime/panel/tool_output.hpp"
 #include "agentty/runtime/view/diff_review.hpp"
@@ -733,7 +736,149 @@ void render_panels(int cols) {
 
 }  // namespace
 
-// The ^O tool-output pane: the list, then each body, from the real corpus.
+// --all-panels: EVERY overlay agentty can open, through ui::view's own
+// pick, from fixed state, in colour. The visual baseline for moving all UI
+// into maya widgets: each screen must render byte-identically before and
+// after (tests/ui_snapshots.sh, case "all-panels").
+static void render_all_panels(int cols) {
+    namespace pn = agentty::ui::panel;
+    namespace lg = agentty::ui::login;
+    auto step = [](Model m, Msg msg) { return app::update(std::move(m), std::move(msg)).first; };
+    auto show = [&](const char* tag, const Model& m) {
+        maya::RenderContext ctx{cols, 40, maya::render_generation(), true};
+        maya::RenderContextGuard g(ctx);
+        emit_element(tag, ui::pick_panel(m).value_or(maya::Element{}), cols);
+    };
+    auto with_edits = [] {
+        Model m;
+        std::string before, after;
+        for (int i = 1; i <= 30; ++i) {
+            before += std::format("int f{}() {{ return {}; }}\n", i, i);
+            after  += i == 4 ? std::string{"int f4() { return -1; }\nvoid log();\n"}
+                    : i == 22 ? std::string{}
+                              : std::format("int f{}() {{ return {}; }}\n", i, i);
+        }
+        m.d.pending_changes.push_back(diff::compute("src/auth/login.cpp", before, after));
+        m.d.pending_changes.push_back(diff::compute("README.md", "", "# notes\nnew file\n"));
+        return m;
+    };
+    auto with_thread = [] {
+        Model m;
+        m.d.current.id = ThreadId{"gallery"};
+        for (int i = 0; i < 3; ++i) {
+            Message u; u.role = Role::User; u.text = "show me the build";
+            u.checkpoint_id = CheckpointId{"cp-" + std::to_string(i)};
+            m.d.current.messages.push_back(std::move(u));
+            Message a; a.role = Role::Assistant;
+            a.text = "Here it is:\n\n```sh\nscripts/build.sh -- --target agentty\n```\n";
+            a.served_model = ModelId{"claude-opus-4-5"};
+            Message::Telemetry t;
+            t.input_tokens = 900 + 100 * static_cast<std::uint32_t>(i);
+            t.output_tokens = 300; t.cache_read = 12000; t.ttft_ms = 400; t.stream_ms = 2100;
+            a.telemetry = t;
+            m.d.current.messages.push_back(std::move(a));
+        }
+        return m;
+    };
+
+    // ── Login: every state ──
+    {
+        Model m; m.ui.login = lg::Picking{.provider = "anthropic"};
+        show("login \xc2\xb7 method", m);
+    }
+    {
+        Model m; lg::ApiKeyInput s; s.provider = "anthropic"; s.provider_label = "Anthropic";
+        s.key_input = "sk-ant-api03-abcdefghij"; s.cursor = static_cast<int>(s.key_input.size());
+        m.ui.login = std::move(s);
+        show("login \xc2\xb7 api key", m);
+    }
+    {
+        Model m; lg::CustomHostInput s; s.host_input = "http://localhost:11434";
+        s.cursor = static_cast<int>(s.host_input.size());
+        m.ui.login = std::move(s);
+        show("login \xc2\xb7 custom host", m);
+    }
+    {
+        Model m; lg::OAuthCode s; s.code_input = "abc123"; s.cursor = 6;
+        s.authorize_url = "https://claude.ai/oauth/authorize?code=true";
+        m.ui.login = std::move(s);
+        show("login \xc2\xb7 oauth code", m);
+    }
+    { Model m; m.ui.login = lg::OAuthExchanging{}; show("login \xc2\xb7 exchanging", m); }
+    {
+        Model m; lg::ChatGptWaiting s; s.device_auth = true;
+        s.authorize_url = "https://auth.openai.com/codex/device"; s.user_code = "ABCD-1234";
+        m.ui.login = std::move(s);
+        show("login \xc2\xb7 chatgpt device", m);
+    }
+    {
+        Model m; lg::DeviceWaiting s; s.provider = "copilot"; s.provider_label = "GitHub Copilot";
+        s.authorize_url = "https://github.com/login/device"; s.user_code = "WXYZ-9876";
+        m.ui.login = std::move(s);
+        show("login \xc2\xb7 device code", m);
+    }
+    {
+        Model m; lg::HostProbing s; s.spec = "http://localhost:11434";
+        m.ui.login = std::move(s);
+        show("login \xc2\xb7 probing host", m);
+    }
+    {
+        Model m; lg::Failed f; f.message = "HTTP 401: invalid x-api-key";
+        m.ui.login = std::move(f);
+        show("login \xc2\xb7 failed", m);
+    }
+    {
+        Model m; lg::AccountList s; s.provider = "anthropic"; s.provider_label = "Anthropic";
+        s.rows = {{"anthropic", "work", true}, {"anthropic", "personal", false}};
+        s.cursor = 1; s.confirm_remove = "personal";
+        m.ui.login = std::move(s);
+        show("login \xc2\xb7 accounts, delete armed", m);
+    }
+
+    // ── Review pane: focused change, a second file, the end ──
+    { auto m = with_edits(); m.ui.panel.descend(pn::DiffReview{{0, 0}}); show("review \xc2\xb7 first", m); }
+    { auto m = with_edits(); m.ui.panel.descend(pn::DiffReview{{1, 0}}); show("review \xc2\xb7 new file", m); }
+
+    // ── Every other overlay, opened the way a key opens it ──
+    struct Open { const char* tag; Msg msg; };
+    const Open opens[] = {
+        {"palette",        Msg{OpenPalette{}}},
+        {"thread list",    Msg{OpenThreadList{}}},
+        {"providers",      Msg{OpenProviders{}}},
+        {"models",         Msg{OpenModels{}}},
+        {"settings",       Msg{OpenSettingsList{settings::Category::General}}},
+        {"appearance",     Msg{OpenAppearance{}}},
+        {"smart mode",     Msg{OpenSmartMode{}}},
+        {"web search",     Msg{OpenWebSearch{}}},
+        {"paste settings", Msg{OpenPasteSettings{}}},
+        {"sandbox",        Msg{OpenSandbox{}}},
+        {"rag",            Msg{OpenRag{}}},
+        {"stats",          Msg{OpenStats{}}},
+        {"skills",         Msg{OpenSkills{}}},
+        {"todo",           Msg{OpenTodoModal{}}},
+        {"code blocks",    Msg{OpenCodeBlocks{}}},
+        {"checkpoints",    Msg{OpenCheckpoints{}}},
+        {"fork",           Msg{OpenFork{}}},
+        {"tool output",    Msg{OpenToolOutput{}}},
+    };
+    for (const auto& o : opens) {
+        Model m = with_thread();
+        // Panels gated on state the fixture otherwise lacks: a git repo for
+        // checkpoints, finished tool calls for the tool viewer.
+        m.ui.git_repo = true;
+        {
+            const auto cases = load_corpus(std::getenv("TOOL_CORPUS") ? std::getenv("TOOL_CORPUS")
+                                                                     : "tests/fixtures/tool_corpus.json");
+            auto& last = m.d.current.messages.back();
+            for (const auto& c : cases)
+                if (c.kind == "typical" && (c.tool == "bash" || c.tool == "edit" || c.tool == "grep"))
+                    last.tool_calls.push_back(make_tool(c));
+        }
+        m = step(std::move(m), o.msg);
+        show(o.tag, m);
+    }
+}
+
 // VIEWER_ROWS sets the terminal height the pane lays out for (default 40).
 static void render_viewer(int cols, const std::vector<std::string>& want,
                           const std::string& kind_filter) {
@@ -1024,6 +1169,7 @@ int main(int argc, char** argv) {
         else if (a == "--welcome") { render_welcome(cols); return 0; }
         else if (a == "--question") { render_question(cols); return 0; }
         else if (a == "--panels") { render_panels(cols); return 0; }
+        else if (a == "--all-panels") { render_all_panels(cols); return 0; }
         else if (a == "--agents") { render_agents(cols); return 0; }
         else if (a == "--viewer-agent") { render_viewer_agent(cols); return 0; }
         else if (a == "--bench-thinking") { bench_thinking(cols); return 0; }

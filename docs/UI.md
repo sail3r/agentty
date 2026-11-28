@@ -12,13 +12,28 @@ The architectural rule:
 > agentty builds **widget Configs** from `Model` state. maya widgets own
 > all rendering. agentty constructs no Elements.
 
-Concrete: every `.cpp` under `src/runtime/view/` (except the legacy
-overlay files in §24) contains zero `Element{...}`, zero `dsl::v(...)`,
-zero `dsl::text(...)`. Each file is a function `Model → SomeWidget::Config`
-and **one widget = one adapter file**: filenames mirror the widget
-they adapt, and the directory layout mirrors the widget hierarchy
-(see §25). The single `view(m)` call materializes everything via one
-`maya::AppLayout{...}.build()`.
+Concrete: nothing under `src/` or `include/agentty/` builds UI. No
+`Element{...}`, no `dsl::` / `text(` / `h(` / `v(` / `hstack()`, no
+`| border(` / `| padding(` pipes, no `using namespace maya`, no
+`<maya/dsl.hpp>` or `<maya/element/builder.hpp>`. Each view file is a
+function `Model → SomeWidget::Config`, and **one widget = one adapter
+file**: filenames mirror the widget they adapt, and the directory layout
+mirrors the widget hierarchy (see §25). The single `view(m)` call
+materializes everything via one `maya::AppLayout{...}.build()`.
+
+Every widget agentty renders lives in maya under
+`include/maya/widget/agentty/` (sources in `src/widget/agentty/`). Rows a
+Config takes as content — a Panel's header, footer and prebuilt rows, a
+turn's provenance line — are `maya::Line`s: styled spans as data.
+Command-line output (`--help`, `paste status`, the sandbox banner) goes
+through `maya::report`.
+
+**Enforced, with no allowlist:** `tests/lint/no_ui_in_agentty.py` (ctest
+`no_ui_in_agentty`) fails on any of the above. Anything that needs to
+draw gets a maya widget. `tests/ui_snapshots.sh` (ctest `ui_snapshots`,
+including the `all-panels` case that renders every overlay) pins every
+screen byte-for-byte with colour, so moving drawing into maya can't move
+a pixel unnoticed.
 
 ---
 
@@ -77,7 +92,7 @@ grow the frame. See the `view.cpp` comments for the full rationale.
 
 ## 2. `maya::AppLayout` — top-level frame
 
-`third_party/maya/include/maya/widget/app_layout.hpp`
+`third_party/maya/include/maya/widget/agentty/app_layout.hpp`
 
 ```cpp
 struct AppLayout::Config {
@@ -102,7 +117,7 @@ point).
 
 ## 3. `maya::Thread` — conversation viewport
 
-`third_party/maya/include/maya/widget/thread.hpp`
+`third_party/maya/include/maya/widget/agentty/thread.hpp`
 
 ```cpp
 struct Thread::Config {
@@ -139,7 +154,7 @@ WelcomeScreen or Conversation. No element work, no rendering logic.
 
 ## 4. `maya::WelcomeScreen` — empty-thread splash
 
-`third_party/maya/include/maya/widget/welcome_screen.hpp`
+`third_party/maya/include/maya/widget/agentty/welcome_screen.hpp`
 
 ```cpp
 struct WelcomeScreen::Config {
@@ -168,7 +183,7 @@ Adapter: `thread/welcome_screen.cpp::welcome_screen_config(m)`.
 
 ## 5. `maya::Conversation` — turn list
 
-`third_party/maya/include/maya/widget/conversation.hpp`
+`third_party/maya/include/maya/widget/agentty/conversation.hpp`
 
 ```cpp
 struct Conversation::Config {
@@ -191,7 +206,7 @@ whether to show the bottom chip.
 
 ## 6. `maya::Turn` — single speaker turn
 
-`third_party/maya/include/maya/widget/turn.hpp`
+`third_party/maya/include/maya/widget/agentty/turn.hpp`
 
 ```cpp
 struct Turn::Config {
@@ -239,7 +254,7 @@ Adapter: `thread/turn/turn.cpp::turn_config(msg, idx, n, m)`.
 
 ## 7. `maya::AgentTimeline` — Actions panel for tool calls
 
-`third_party/maya/include/maya/widget/agent_timeline.hpp`
+`third_party/maya/include/maya/widget/agentty/agent_timeline.hpp`
 
 ```cpp
 struct AgentTimeline::Config {
@@ -275,7 +290,7 @@ colors, builds the events vector. Each event's body is filled via
 
 ## 8. `maya::ToolBodyPreview` — discriminated body content
 
-`third_party/maya/include/maya/widget/tool_body_preview.hpp`
+`third_party/maya/include/maya/widget/agentty/tool_body_preview.hpp`
 
 Drives the content under each timeline event's `│` stripe. Picks one
 of five renderers based on `kind`:
@@ -315,7 +330,7 @@ color/label, event status, timeline detail) and
 
 ## 9. `maya::Permission` — inline permission card
 
-`third_party/maya/include/maya/widget/permission.hpp`
+`third_party/maya/include/maya/widget/agentty/permission.hpp`
 
 ```cpp
 struct Permission::Config {
@@ -335,7 +350,7 @@ Adapter: `thread/turn/permission.cpp::inline_permission_config(pp, tc)`.
 
 ## 10. `maya::CheckpointDivider`
 
-`third_party/maya/include/maya/widget/checkpoint_divider.hpp`
+`third_party/maya/include/maya/widget/agentty/checkpoint_divider.hpp`
 
 ```cpp
 struct CheckpointDivider::Config {
@@ -353,7 +368,7 @@ the rail, above a turn. Triggered by `Turn::Config::checkpoint_above`
 
 ## 11. `maya::ActivityIndicator`
 
-`third_party/maya/include/maya/widget/activity_indicator.hpp`
+`third_party/maya/include/maya/widget/agentty/activity_indicator.hpp`
 
 ```cpp
 struct ActivityIndicator::Config {
@@ -375,7 +390,7 @@ collapses cleanly when nothing is in flight.
 
 ## 12. `maya::ChangesStrip` — pending edits banner
 
-`third_party/maya/include/maya/widget/changes_strip.hpp`
+`third_party/maya/include/maya/widget/agentty/changes_strip.hpp`
 
 ```cpp
 struct ChangesStrip::Config {
@@ -398,7 +413,7 @@ Adapter: `changes_strip.cpp::changes_strip_config(m)`.
 
 ## 13. `maya::Composer` — bordered input box
 
-`third_party/maya/include/maya/widget/composer.hpp`
+`third_party/maya/include/maya/widget/agentty/composer.hpp`
 
 ```cpp
 struct Composer::Config {
@@ -461,7 +476,7 @@ Adapter: `composer.cpp::composer_config(m)`.
 
 ## 14. `maya::StatusBar` — bottom panel
 
-`third_party/maya/include/maya/widget/status_bar.hpp`
+`third_party/maya/include/maya/widget/agentty/status_bar.hpp`
 
 Five fixed rows (always 5 — the status row never grows or shrinks, so
 the composer above never bobs vertically when a toast appears).
@@ -517,7 +532,7 @@ maya::StatusBar::Config status_bar_config(const Model& m) {
 
 ## 15. `maya::TitleChip` — leading-edge title chip
 
-`third_party/maya/include/maya/widget/title_chip.hpp`
+`third_party/maya/include/maya/widget/agentty/title_chip.hpp`
 
 ```cpp
 struct TitleChip::Config {
@@ -541,7 +556,7 @@ Adapter: `status_bar/title_chip.cpp::title_chip_config(m)`.
 
 ## 16. `maya::PhaseChip` — phase indicator
 
-`third_party/maya/include/maya/widget/phase_chip.hpp`
+`third_party/maya/include/maya/widget/agentty/phase_chip.hpp`
 
 ```cpp
 struct PhaseChip::Config {
@@ -569,7 +584,7 @@ them per-frame based on terminal width.
 
 ## 17. `maya::TokenStreamSparkline` — compact tok/s + sparkline
 
-`third_party/maya/include/maya/widget/token_stream_sparkline.hpp`
+`third_party/maya/include/maya/widget/agentty/token_stream_sparkline.hpp`
 
 ```cpp
 struct TokenStreamSparkline::Config {
@@ -601,7 +616,7 @@ only the current burst.
 
 ## 18. `maya::ContextGauge` — context-window fuel gauge
 
-`third_party/maya/include/maya/widget/context_gauge.hpp`
+`third_party/maya/include/maya/widget/agentty/context_gauge.hpp`
 
 ```cpp
 struct ContextGauge::Config {
@@ -624,7 +639,7 @@ Adapter: `status_bar/context_gauge.cpp::context_gauge_config(m)`.
 
 ## 19. `maya::StatusBanner` — transient toast row
 
-`third_party/maya/include/maya/widget/status_banner.hpp`
+`third_party/maya/include/maya/widget/agentty/status_banner.hpp`
 
 ```cpp
 struct StatusBanner::Config {
@@ -675,7 +690,7 @@ Adapter: `status_bar/shortcut_row.cpp::shortcut_row_config(m)`.
 
 ## 21. `maya::PhaseAccent` — soft horizontal rule
 
-`third_party/maya/include/maya/widget/phase_accent.hpp`
+`third_party/maya/include/maya/widget/agentty/phase_accent.hpp`
 
 ```cpp
 struct PhaseAccent::Config {
@@ -695,7 +710,7 @@ strips), driven by `StatusBar::Config::phase_color`.
 
 ## 22. `maya::ModelBadge` — colored model chip
 
-`third_party/maya/include/maya/widget/model_badge.hpp`
+`third_party/maya/include/maya/widget/agentty/model_badge.hpp`
 
 Compact `● Opus` / `● Sonnet` / `● Haiku` brand chip. Used in two
 places: WelcomeScreen's chip row and StatusBar's activity row.
@@ -709,7 +724,7 @@ reshape).
 
 ## 23. `maya::Overlay` — modal layer
 
-`third_party/maya/include/maya/widget/overlay.hpp`
+`third_party/maya/include/maya/widget/agentty/overlay.hpp`
 
 ```cpp
 struct Overlay::Config {

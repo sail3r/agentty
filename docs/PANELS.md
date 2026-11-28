@@ -106,14 +106,14 @@ still backstops panels whose handlers mishandle Esc — see
 ## The widget — one Panel, items, kinds
 
 maya has exactly **one** overlay widget: `maya::Panel`
-(`third_party/maya/include/maya/widget/panel.hpp`, umbrella). It replaced Picker and
+(`third_party/maya/include/maya/widget/agentty/panel.hpp`, umbrella). It replaced Picker and
 Form, which were two implementations of the same box; every fix to one had
 to be repeated in the other, and the ones that weren't became bugs.
 
 The family is modular, one file per concern:
 
 ```
-third_party/maya/include/maya/widget/panel/
+third_party/maya/include/maya/widget/agentty/panel/
 ├── item.hpp      the ONE Item (badge · leading · highlight · trailing ·
 │                 help-under-focused-row · error · locked · origin)
 ├── item/         ★ one widget per kind: value struct + renderer, side by side

@@ -22,7 +22,7 @@
 #include <agentty/runtime/app/update/internal.hpp>
 
 #include <maya/render/renderer.hpp>
-#include <maya/widget/conversation.hpp>
+#include <maya/widget/agentty/conversation.hpp>
 
 #include <algorithm>
 #include <chrono>

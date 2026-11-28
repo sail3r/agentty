@@ -13,7 +13,7 @@ namespace agentty::ui {
 // docs/design/smart-mode.md.
 Element smart_mode_panel(const Model& m) {
     auto* o = m.ui.panel.get<pn::SmartMode>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
     // Every glyph belongs to maya::Panel; this host only projects state onto
     // its Config, exactly as the Retrieval pane does.
     return maya::Panel{form_config(o->form, success,

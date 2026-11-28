@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/token_stream_sparkline.hpp>
+#include <maya/widget/agentty/token_stream_sparkline.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

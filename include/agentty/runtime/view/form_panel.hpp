@@ -11,7 +11,7 @@
 // hand-written pickers did.
 
 #include <maya/style/color.hpp>
-#include <maya/widget/panel.hpp>
+#include <maya/widget/agentty/panel.hpp>
 
 #include "agentty/runtime/panel/form.hpp"
 

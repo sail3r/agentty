@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/stream_note.hpp>
+#include <maya/widget/agentty/stream_note.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

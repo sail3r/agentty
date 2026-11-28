@@ -8,7 +8,7 @@
 
 #include "agtest.hpp"
 
-#include <maya/widget/markdown.hpp>
+#include <maya/widget/agentty/markdown.hpp>
 
 using K = maya::StreamingMarkdown::BlockKind;
 

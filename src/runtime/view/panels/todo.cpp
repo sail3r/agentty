@@ -8,7 +8,7 @@
 namespace agentty::ui {
 
 Element todo_panel(const Model& m) {
-    if (!pick::is_open(m.ui.todo.open)) return nothing();
+    if (!pick::is_open(m.ui.todo.open)) return maya::Panel::empty();
 
     Panel::Config cfg;
     cfg.title      = " Plan ";
@@ -22,8 +22,8 @@ Element todo_panel(const Model& m) {
     cfg.selected   = -1;
 
     if (m.ui.todo.items.empty()) {
-        cfg.prebuilt.push_back(text("  No tasks yet.", fg_italic(muted)));
-        cfg.prebuilt.push_back(text("  The agent will create tasks as it works.", fg_dim(muted)));
+        cfg.prebuilt.push_back(maya::Line{"  No tasks yet.", fg_italic(muted)});
+        cfg.prebuilt.push_back(maya::Line{"  The agent will create tasks as it works.", fg_dim(muted)});
     } else {
         // PlanView returns one Element with all tasks. It lives in
         // the scrollable region so a long task list pages cleanly
@@ -44,18 +44,12 @@ Element todo_panel(const Model& m) {
         int done_count = 0;
         for (const auto& item : m.ui.todo.items)
             if (item.status == TodoStatus::Completed) ++done_count;
-        cfg.footer.push_back(text(""));
-        cfg.footer.push_back(h(
-            text("  " + std::to_string(done_count) + "/" + std::to_string(total),
-                 fg_bold(done_count == total ? success : info)),
-            text(" completed", fg_dim(muted))
-        ).build());
+        cfg.footer.push_back(maya::Line::blank());
+        cfg.footer.push_back(maya::Line{{"  " + std::to_string(done_count) + "/" + std::to_string(total), fg_bold(done_count == total ? success : info)}, {" completed", fg_dim(muted)}});
     }
 
-    cfg.footer.push_back(text(""));
-    cfg.footer.push_back(h(
-        text("Esc", fg_of(fg)), text(" close", fg_dim(muted))
-    ).build());
+    cfg.footer.push_back(maya::Line::blank());
+    cfg.footer.push_back(maya::Line{{"Esc", fg_of(fg)}, {" close", fg_dim(muted)}});
 
     return Panel{std::move(cfg)}.build();
 }

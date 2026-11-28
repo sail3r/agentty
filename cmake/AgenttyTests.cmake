@@ -1237,7 +1237,15 @@ add_test(NAME hidden_locks
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lint/hidden_locks.py
                  ${CMAKE_SOURCE_DIR})
 set_tests_properties(hidden_locks PROPERTIES LABELS static TIMEOUT 60)
+# no_ui_in_agentty: agentty fills widget Configs, maya draws (docs/UI.md).
+# No allowlist: anything that draws belongs in maya/widget/agentty/.
+add_test(NAME no_ui_in_agentty
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lint/no_ui_in_agentty.py
+                 ${CMAKE_SOURCE_DIR})
+set_tests_properties(no_ui_in_agentty PROPERTIES LABELS static TIMEOUT 60)
 endif()
+# (ui_snapshots, which pins every screen byte-for-byte, is registered with
+# tool_gallery above; the all-panels case covers every overlay.)
 
 add_test(NAME io_roots
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lint/io_roots.py ${CMAKE_SOURCE_DIR})

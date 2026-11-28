@@ -14,7 +14,7 @@ namespace agentty::ui {
 // leading number is the affordance that teaches the fast path.
 Element code_blocks_panel(const Model& m) {
     auto* o = m.ui.panel.get<pn::CodeBlocks>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     Panel::Config cfg;
     cfg.title      = " Run Code Block ";
@@ -82,7 +82,7 @@ Element code_blocks_panel(const Model& m) {
         cfg.items.push_back(std::move(row));
     }
 
-    cfg.footer.push_back(text(""));
+    cfg.footer.push_back(maya::Line::blank());
     cfg.footer.push_back(key_hints({
         {"↑↓", "move", 5},        // ↑↓
         {"Enter/1-9", "run", 3},
@@ -100,7 +100,7 @@ Element code_blocks_panel(const Model& m) {
 // the LAST few lines (errors live at the end) and the decision keys.
 Element code_block_result_panel(const Model& m) {
     auto* r = m.ui.panel.get<pn::CodeBlockResult>();
-    if (!r) return nothing();
+    if (!r) return maya::Panel::empty();
 
     const bool ok_exit = !r->timed_out && r->exit_code == 0;
 
@@ -120,8 +120,7 @@ Element code_block_result_panel(const Model& m) {
             cmd_line.resize(eol);
             cmd_line += " \xe2\x80\xa6";   // …
         }
-        cfg.header.push_back(h(text("$ ", fg_bold(cfg.accent)),
-                               text(std::move(cmd_line), fg_of(fg))).build());
+        cfg.header.push_back(maya::Line{{"$ ", fg_bold(cfg.accent)}, {std::move(cmd_line), fg_of(fg)}});
         std::size_t lines = r->output.empty() ? 0 : 1;
         for (char c : r->output) if (c == '\n') ++lines;
         std::string status = r->timed_out
@@ -131,9 +130,8 @@ Element code_block_result_panel(const Model& m) {
         status += (r->output.size() >= 1024)
             ? std::to_string(r->output.size() / 1024) + " KB"
             : std::to_string(r->output.size()) + " B";
-        cfg.header.push_back(text("  " + status,
-            ok_exit ? fg_of(muted) : fg_bold(danger)));
-        cfg.header.push_back(sep);
+        cfg.header.push_back(maya::Line{"  " + status, ok_exit ? fg_of(muted) : fg_bold(danger)});
+        cfg.header.push_back(maya::Line::rule());
     }
 
     // Full capture, line-numbered like the tool output viewer: a right-
@@ -168,8 +166,7 @@ Element code_block_result_panel(const Model& m) {
         std::string_view out{r->output};
         if (out.empty()) {
             cache.rows.push_back(
-                text("  (no output captured)", fg_italic(muted))
-                | height(1) | overflow(Overflow::Hidden));
+                Line::row({Span{"  (no output captured)", fg_italic(muted)}}));
         } else {
             const Color pipe_hue = ok_exit ? muted : danger;
             std::vector<std::string_view> lines;
@@ -191,15 +188,12 @@ Element code_block_result_panel(const Model& m) {
                 std::string num = std::to_string(i + 1);
                 if (static_cast<int>(num.size()) < gutter_w)
                     num.insert(0, gutter_w - num.size(), ' ');
-                cache.rows.push_back(
-                    hstack().width(Dimension::percent(100))(
-                      text("  " + num + " ", fg_dim(warn)),
-                      text("\xe2\x94\x82 ", fg_dim(pipe_hue)),   // │
-                      text(std::string{lines[i]},
-                           ok_exit ? fg_of(muted) : fg_of(fg))
-                          | clip | grow(1.0f) | shrink(1.0f)
-                    ).build()
-                    | height(1) | overflow(Overflow::Hidden));
+                Span body{std::string{lines[i]}, ok_exit ? fg_of(muted) : fg_of(fg)};
+                body.fill = true;
+                cache.rows.push_back(Line::row({
+                    Span{"  " + num + " ", fg_dim(warn)},
+                    Span{"\xe2\x94\x82 ", fg_dim(pipe_hue)},   // │
+                    std::move(body)}));
             }
         }
     }
@@ -217,16 +211,14 @@ Element code_block_result_panel(const Model& m) {
     for (int i = first; i < last; ++i)
         cfg.prebuilt.push_back(cache.rows[static_cast<std::size_t>(i)]);
 
-    cfg.footer.push_back(text(""));
+    cfg.footer.push_back(maya::Line::blank());
     // Scroll-position readout: which lines of the capture are on screen —
     // the manual window has no scrollbar, so this is the affordance that
     // there is more output above/below (same grammar as the tool viewer).
     if (total_rows > vh) {
-        cfg.footer.push_back(text(
-            "  " + std::to_string(first + 1) + "\xe2\x80\x93"   // –
+        cfg.footer.push_back(maya::Line{"  " + std::to_string(first + 1) + "\xe2\x80\x93"   // –
                  + std::to_string(last) + " / "
-                 + std::to_string(total_rows) + " lines",
-            fg_dim(muted)));
+                 + std::to_string(total_rows) + " lines", fg_dim(muted)});
     }
     cfg.footer.push_back(key_hints({
         {"a", "attach to composer", 6},

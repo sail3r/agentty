@@ -42,7 +42,7 @@
 #include <maya/render/canvas.hpp>
 #include <maya/render/renderer.hpp>
 #include <maya/style/theme.hpp>
-#include <maya/widget/thread.hpp>
+#include <maya/widget/agentty/thread.hpp>
 
 #include "agentty/runtime/app/update/internal.hpp"
 #include "agentty/runtime/model.hpp"

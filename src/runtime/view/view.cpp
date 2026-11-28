@@ -5,10 +5,10 @@
 #include <optional>
 
 #include <maya/core/render_context.hpp>
-#include <maya/element/builder.hpp>
+#include <maya/widget/agentty/line.hpp>
 #include <maya/platform/io.hpp>
-#include <maya/widget/app_layout.hpp>
-#include <maya/widget/overlay.hpp>
+#include <maya/widget/agentty/app_layout.hpp>
+#include <maya/widget/agentty/overlay.hpp>
 
 #include "agentty/domain/ui_theme.hpp"
 #include "agentty/domain/ui_live.hpp"
@@ -26,8 +26,6 @@
 namespace pn = agentty::ui::panel;
 
 namespace agentty::ui {
-
-namespace {
 
 // Render the active overlay, if any. WHICH overlay is active is decided by
 // panel::top() — the SAME function subscribe.cpp routes keys through, so
@@ -70,6 +68,8 @@ std::optional<maya::Element> pick_panel(const Model& m) {
     }
     return std::nullopt;
 }
+
+namespace {
 
 // Bottom-inset overlay compose. maya's Overlay widget bottom-pins the
 // picker to the base BOX bottom and paints a full-width bg fill over

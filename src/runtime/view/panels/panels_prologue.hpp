@@ -23,9 +23,10 @@
 #include <variant>
 #include <vector>
 
-#include <maya/widget/panel.hpp>
-#include <maya/widget/plan_view.hpp>
-#include <maya/widget/tool_body_preview.hpp>
+#include <maya/widget/agentty/panel.hpp>
+#include <maya/widget/agentty/peek_card.hpp>
+#include <maya/widget/agentty/plan_view.hpp>
+#include <maya/widget/agentty/tool_body_preview.hpp>
 #include <maya/platform/io.hpp>
 
 #include "agentty/runtime/view/helpers.hpp"
@@ -52,8 +53,22 @@ namespace pn = agentty::ui::panel;
 
 namespace agentty::ui {
 
-using namespace maya;
-using namespace maya::dsl;
+// maya's widget, style and data types, by name. NOT `using namespace maya`:
+// that also brings the drawing DSL (text/h/v/border…) into scope, and these
+// files only fill widget Configs (tests/lint/no_ui_in_agentty.py).
+using maya::Panel;
+using maya::Element;
+using maya::Style;
+using maya::Color;
+using maya::ThemeSlot;
+using maya::BorderStyle;
+using maya::TextWrap;
+using maya::PeekCard;
+using maya::TabMark;
+using maya::ScrollState;
+using maya::Line;
+using maya::Span;
+using maya::string_width;
 
 // The shared picker helpers live in pickers_common.hpp; pull the ones the
 // split files use into scope so call sites read exactly as they did in the

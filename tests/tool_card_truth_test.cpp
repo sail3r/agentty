@@ -17,7 +17,7 @@
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_body_preview.hpp"
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_helpers.hpp"
 #include "maya/print.hpp"
-#include "maya/widget/tool_body_preview.hpp"
+#include "maya/widget/agentty/tool_body_preview.hpp"
 
 namespace A = agentty;
 namespace U = agentty::ui;

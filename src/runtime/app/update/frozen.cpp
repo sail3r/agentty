@@ -49,14 +49,13 @@
 #include <vector>
 
 #include <maya/core/executor.hpp>
-#include <maya/dsl.hpp>
-#include <maya/element/text.hpp>   // maya::string_width (display-column count)
+#include <maya/widget/agentty/line.hpp>   // maya::string_width
 #include <maya/platform/io.hpp>
 #include <maya/render/cache_id.hpp>
 #include <maya/render/scrollback_ledger.hpp>
 #include <maya/render/scrollback_replay.hpp>
-#include <maya/widget/conversation.hpp>
-#include <maya/widget/turn.hpp>
+#include <maya/widget/agentty/conversation.hpp>
+#include <maya/widget/agentty/turn.hpp>
 
 #include "agentty/runtime/view/palette.hpp"
 #include "agentty/domain/ui_prefs.hpp"
@@ -917,11 +916,7 @@ std::vector<maya::ReplayBlock> build_history_blocks(const Model& m) {
     // with AppLayout's top padding row, which stands in for the gap's
     // trailing blank, so the history adds the gap minus that row.
     if (!out.empty() && !m.ui.frozen.empty() && !m.ui.frozen.separator_at(0)) {
-        using namespace maya::dsl;
-        if (gap_rows() > 1)
-            out.push_back(maya::make_replay_block(maya::CacheIdBuilder{}.add(std::string_view{"agentty.sep.seam"}).add(static_cast<std::uint64_t>(gap_rows())).build().hash(), v(blank(), maya::Conversation::divider()).build()));
-        else
-            out.push_back(maya::make_replay_block(maya::CacheIdBuilder{}.add(std::string_view{"agentty.sep.seam"}).add(static_cast<std::uint64_t>(gap_rows())).build().hash(), maya::Conversation::divider()));
+        out.push_back(maya::make_replay_block(maya::CacheIdBuilder{}.add(std::string_view{"agentty.sep.seam"}).add(static_cast<std::uint64_t>(gap_rows())).build().hash(), maya::Conversation::gap_lead(gap_rows() == 1)));
     }
     // The sealed Elements hold their own markdown trees; the cache entries
     // settled just for this are dead weight. Drop them.
@@ -1093,11 +1088,7 @@ maya::ScrollbackReplay::Chunk history_chunk(const Model& m, std::size_t cursor) 
     // The first chunk (nearest the live prefix) ends with the seam gap.
     if (cursor == SIZE_MAX && !out.blocks.empty() && !m.ui.frozen.empty()
         && !m.ui.frozen.separator_at(0)) {
-        using namespace maya::dsl;
-        if (gap_rows() > 1)
-            out.blocks.push_back(maya::make_replay_block(maya::CacheIdBuilder{}.add(std::string_view{"agentty.sep.seam"}).add(static_cast<std::uint64_t>(gap_rows())).build().hash(), v(blank(), maya::Conversation::divider()).build()));
-        else
-            out.blocks.push_back(maya::make_replay_block(maya::CacheIdBuilder{}.add(std::string_view{"agentty.sep.seam"}).add(static_cast<std::uint64_t>(gap_rows())).build().hash(), maya::Conversation::divider()));
+        out.blocks.push_back(maya::make_replay_block(maya::CacheIdBuilder{}.add(std::string_view{"agentty.sep.seam"}).add(static_cast<std::uint64_t>(gap_rows())).build().hash(), maya::Conversation::gap_lead(gap_rows() == 1)));
     }
     for (std::size_t k : settled_here)
         m.ui.view_cache.drop(m.d.current.id, msgs[k].id);

@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/context_gauge.hpp>
+#include <maya/widget/agentty/context_gauge.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

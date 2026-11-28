@@ -23,7 +23,7 @@
 #include "agentty/runtime/panel/appearance.hpp"
 #include "agentty/runtime/panel/settings/items.hpp"
 #include <maya/core/motion.hpp>
-#include <maya/widget/markdown.hpp>
+#include <maya/widget/agentty/markdown.hpp>
 
 #include <print>
 #include <functional>

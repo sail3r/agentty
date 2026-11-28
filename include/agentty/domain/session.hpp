@@ -17,7 +17,7 @@
 
 #include <maya/core/animation.hpp>
 #include <maya/core/motion.hpp>   // anim::Motion (self-ticking disp_rate)
-#include <maya/widget/spinner.hpp>
+#include <maya/widget/agentty/spinner.hpp>
 
 #include "agentty/domain/compaction_style.hpp"
 #include "agentty/domain/complexity.hpp"

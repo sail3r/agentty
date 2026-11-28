@@ -96,7 +96,7 @@ form::Field list_row(std::string_view id, std::string label, std::string help,
     return f;
 }
 
-form::Field text(std::string_view id, std::string label, std::string help,
+form::Field text_field(std::string_view id, std::string label, std::string help,
                  std::string value) {
     form::Field f;
     f.id = std::string{id};
@@ -712,7 +712,7 @@ SandboxListPane::SandboxListPane()
 
 form::Field list_entry_text(std::string_view id, std::string label,
                             std::string help) {
-    return text(id, std::move(label), std::move(help), {});
+    return text_field(id, std::move(label), std::move(help), {});
 }
 
 form::Field list_entry_number(std::string_view id, std::string label,
@@ -728,7 +728,7 @@ form::Field list_entry_number(std::string_view id, std::string label,
     // Digits are enforced on readback instead (read_sandbox_list parses and
     // drops anything that is not a port), so the constraint survives without
     // costing the caret.
-    return text(id, std::move(label), std::move(help), {});
+    return text_field(id, std::move(label), std::move(help), {});
 }
 
 // A portable env var name, `[A-Za-z_][A-Za-z0-9_]*`, optionally ending in
@@ -840,7 +840,7 @@ SandboxListPane build_sandbox_list(std::string_view row_id, std::string title,
     // small betrayal.
     for (std::size_t i = 0; i < values.size(); ++i) {
         const auto id = "e" + std::to_string(i);
-        auto f = text(id, std::to_string(i + 1) + ".", {}, values[i]);
+        auto f = text_field(id, std::to_string(i + 1) + ".", {}, values[i]);
         // Caret at the END of the value, not at 0.
         //
         // A Text field defaults its cursor to 0, so moving onto an entry that

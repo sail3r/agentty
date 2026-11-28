@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/cache_gauge.hpp>
+#include <maya/widget/agentty/cache_gauge.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

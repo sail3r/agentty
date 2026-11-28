@@ -9,7 +9,7 @@ namespace agentty::ui {
 
 Element symbol_panel(const Model& m) {
     auto* o = m.ui.panel.get<pn::Symbol>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     const auto& matches = o->picker.filtered();
     const auto& entries = o->picker.entries();
@@ -26,16 +26,14 @@ Element symbol_panel(const Model& m) {
     // continuation of what was typed in the composer.
     cfg.header.push_back(
         filter_header(o->picker.query(), "symbols", highlight, "# "));
-    cfg.header.push_back(sep);
+    cfg.header.push_back(maya::Line::rule());
 
     if (entries.empty()) {
-        cfg.prebuilt.push_back(text(
-            o->picker.source_ready()
+        cfg.prebuilt.push_back(maya::Line{o->picker.source_ready()
                 ? "  no symbols indexed"
-                : "  indexing symbols… (type to filter as it fills)",
-            fg_italic(muted)));
+                : "  indexing symbols… (type to filter as it fills)", fg_italic(muted)});
     } else if (matches.empty()) {
-        cfg.prebuilt.push_back(text("  no matches", fg_italic(muted)));
+        cfg.prebuilt.push_back(maya::Line{"  no matches", fg_italic(muted)});
     } else {
         cfg.items.reserve(matches.size());
         for (int i = 0; i < static_cast<int>(matches.size()); ++i) {
@@ -62,10 +60,8 @@ Element symbol_panel(const Model& m) {
     }
 
     if (static_cast<int>(matches.size()) > kViewportH) {
-        cfg.footer.push_back(text(
-            "  " + std::to_string(o->picker.index() + 1) + "/"
-                + std::to_string(matches.size()),
-            fg_dim(muted)));
+        cfg.footer.push_back(maya::Line{"  " + std::to_string(o->picker.index() + 1) + "/"
+                + std::to_string(matches.size()), fg_dim(muted)});
     }
 
     // Same gap as the @ picker: the keys worked, nothing said so.

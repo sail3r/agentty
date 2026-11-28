@@ -30,7 +30,7 @@
 
 #include <maya/print.hpp>
 #include <maya/render/renderer.hpp>
-#include <maya/widget/markdown.hpp>
+#include <maya/widget/agentty/markdown.hpp>
 
 #include <cstdio>
 #include <memory>

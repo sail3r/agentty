@@ -18,8 +18,7 @@
 #include <utility>
 #include <vector>
 
-#include <maya/dsl.hpp>
-#include <maya/widget/panel.hpp>
+#include <maya/widget/agentty/panel.hpp>
 #include <maya/platform/io.hpp>
 
 #include "agentty/runtime/model.hpp"
@@ -30,10 +29,26 @@
 #include "agentty/provider/registry.hpp"    // wire_streams_reasoning_text
 #include "agentty/provider/selection.hpp"
 
+namespace agentty::ui {
+// maya's widget, style and data types, by name -- never `using namespace
+// maya`, which brings the drawing DSL with it (tests/lint/no_ui_in_agentty.py).
+using maya::Panel;
+using maya::Element;
+using maya::Style;
+using maya::Color;
+using maya::ThemeSlot;
+using maya::BorderStyle;
+using maya::TextWrap;
+using maya::ScrollState;
+using maya::Line;
+using maya::Span;
+using maya::string_width;
+}  // namespace agentty::ui
+
 namespace agentty::ui::panel_detail {
 
-using namespace maya;
-using namespace maya::dsl;
+using maya::Panel;
+using maya::Element;
 
 // ── Path formatting (thread list / mention palette) ───────────────────────
 
@@ -260,21 +275,21 @@ reasoning_effort_footer(const Model& m, std::string_view model_id,
     if (effort_capable(caps)) {
         // One line: the effort ladder (current tier bracketed ‹like this› and
         // accented), then the global ^R show/hide toggle. ←/→ cycles the tier.
-        std::vector<Element> parts;
-        parts.push_back(text("reasoning ", fg_dim(muted)));
+        maya::Line parts;
+        parts.add("reasoning ", fg_dim(muted));
         // What this model will actually get for the user's pick.
         const Effort shown = clamp_effort(m.d.effort, caps);
         for (Effort lvl : available_efforts(caps)) {
             const std::string lbl{effort_label(lvl)};
             if (lvl == shown) {
-                parts.push_back(text("\xe2\x80\xb9", fg_of(accent)));      // ‹
-                parts.push_back(text(lbl, fg_bold(accent)));
-                parts.push_back(text("\xe2\x80\xba ", fg_of(accent)));   // ›
+                parts.add("\xe2\x80\xb9", fg_of(accent));      // ‹
+                parts.add(lbl, fg_bold(accent));
+                parts.add("\xe2\x80\xba ", fg_of(accent));   // ›
             } else {
-                parts.push_back(text(lbl + " ", fg_dim(muted)));
+                parts.add(lbl + " ", fg_dim(muted));
             }
         }
-        out.push_back(h(std::move(parts)).build());
+        out.push_back(std::move(parts));
     } else {
         // No effort control on this model, and nothing else to say about
         // reasoning here — display lives in Appearance. An empty footer row

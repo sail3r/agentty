@@ -9,7 +9,7 @@ namespace agentty::ui {
 
 Element providers_panel(const Model& m) {
     auto* picker = m.ui.panel.get<pn::Providers>();
-    if (!picker) return nothing();
+    if (!picker) return maya::Panel::empty();
 
     Panel::Config cfg;
     cfg.title      = " Providers ";
@@ -41,7 +41,7 @@ Element providers_panel(const Model& m) {
     // Live search header (mirrors the model picker). Backspace trims; typing
     // narrows. Hidden ACP/custom rows return the moment the query is cleared.
     cfg.header.push_back(filter_header(picker->query, "providers"));
-    cfg.header.push_back(sep);
+    cfg.header.push_back(maya::Line::rule());
 
     // Trailing auth-status column for a built-in preset. One place, so every
     // provider's badge stays consistent.
@@ -350,7 +350,7 @@ Element providers_panel(const Model& m) {
                != provider::credentials::AddMethod::None;
     }();
 
-    cfg.footer.push_back(text(""));
+    cfg.footer.push_back(maya::Line::blank());
 
     // The footer's top line is CONTEXTUAL, because a static legend teaches
     // nothing at the moment a user is stuck. Three states:
@@ -365,36 +365,18 @@ Element providers_panel(const Model& m) {
     const bool no_presets  = !picker->query.empty()
                            && provider::filter_provider_indices(picker->query).empty();
     if (host_shaped) {
-        cfg.footer.push_back(h(
-            text("\xe2\x8f\x8e", fg_of(info)),
-            text(" connects to ", fg_dim(muted)),
-            text(picker->query, fg_of(fg)),
-            text(" \xc2\xb7 agentty probes it and adopts the dialect it finds",
-                 fg_dim(muted))
-        ).build());
+        cfg.footer.push_back(maya::Line{{"\xe2\x8f\x8e", fg_of(info)}, {" connects to ", fg_dim(muted)}, {picker->query, fg_of(fg)}, {" \xc2\xb7 agentty probes it and adopts the dialect it finds", fg_dim(muted)}});
     } else if (no_presets) {
-        cfg.footer.push_back(h(
-            text("no built-in provider matches ", fg_dim(muted)),
-            text("\xe2\x80\x9c" + picker->query + "\xe2\x80\x9d", fg_of(fg)),
-            text(" \xc2\xb7 type a ", fg_dim(muted)),
-            text("host:port", fg_of(info)),
-            text(" to use any OpenAI-compatible server", fg_dim(muted))
-        ).build());
+        cfg.footer.push_back(maya::Line{{"no built-in provider matches ", fg_dim(muted)}, {"\xe2\x80\x9c" + picker->query + "\xe2\x80\x9d", fg_of(fg)}, {" \xc2\xb7 type a ", fg_dim(muted)}, {"host:port", fg_of(info)}, {" to use any OpenAI-compatible server", fg_dim(muted)}});
     } else {
         // The legend explains the badges that are ACTUALLY on screen. In the
         // browse view every row is usable, so there is nothing to explain;
         // expanded, the unconfigured rows say "Enter to set up" rather than
         // naming an env var, so the legend must say the same thing.
         if (any_unconfigured)
-            cfg.footer.push_back(h(
-                text("\xe2\x9c\x93", fg_of(success)), text(" ready  ", fg_dim(muted)),
-                text("\xc2\xb7", fg_dim(muted)),
-                text("  Enter on a dim row adds it", fg_dim(muted))
-            ).build());
+            cfg.footer.push_back(maya::Line{{"\xe2\x9c\x93", fg_of(success)}, {" ready  ", fg_dim(muted)}, {"\xc2\xb7", fg_dim(muted)}, {"  Enter on a dim row adds it", fg_dim(muted)}});
         else
-            cfg.footer.push_back(h(
-                text("\xe2\x9c\x93", fg_of(success)), text(" ready  ", fg_dim(muted))
-            ).build());
+            cfg.footer.push_back(maya::Line{{"\xe2\x9c\x93", fg_of(success)}, {" ready  ", fg_dim(muted)}});
     }
     std::vector<Hint> hints{
         {"\xe2\x86\x91\xe2\x86\x93", "move", 5},        // ↑↓

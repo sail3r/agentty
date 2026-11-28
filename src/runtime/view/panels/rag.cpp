@@ -12,8 +12,8 @@
 #include "agentty/runtime/panel/rag.hpp"
 #include "panels_common.hpp"
 
-#include <maya/widget/panel.hpp>
-#include <maya/widget/panel.hpp>
+#include <maya/widget/agentty/panel.hpp>
+#include <maya/widget/agentty/panel.hpp>
 #include <maya/platform/io.hpp>
 
 #include <algorithm>
@@ -23,13 +23,11 @@ namespace pn = agentty::ui::panel;
 
 namespace agentty::ui {
 
-using namespace maya;
-using namespace maya::dsl;
 namespace rs = agentty::rag_settings;
 
 Element rag_panel(const Model& m) {
     const auto* o = m.ui.panel.get<pn::Rag>();
-    if (!o) return nothing();
+    if (!o) return maya::Panel::empty();
 
     // ONE pane, always the form. Mode and embedder are two rows of the same
     // question; every glyph belongs to maya::Panel and this host does nothing

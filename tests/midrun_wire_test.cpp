@@ -38,7 +38,7 @@
 #include <maya/render/serialize.hpp>
 #include <maya/style/theme.hpp>
 #include <maya/terminal/writer.hpp>
-#include <maya/widget/app_layout.hpp>
+#include <maya/widget/agentty/app_layout.hpp>
 
 #include "agtest.hpp"
 

@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/widget/phase_chip.hpp>
+#include <maya/widget/agentty/phase_chip.hpp>
 #include "agentty/runtime/model.hpp"
 
 namespace agentty::ui {

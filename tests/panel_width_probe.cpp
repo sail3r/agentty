@@ -20,7 +20,7 @@
 #include "agtest.hpp"
 
 #include <maya/print.hpp>
-#include <maya/widget/panel.hpp>
+#include <maya/widget/agentty/panel.hpp>
 
 #include <cstdlib>
 #include <string>

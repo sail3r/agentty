@@ -26,7 +26,7 @@
 #include <maya/render/canvas.hpp>
 #include <maya/render/renderer.hpp>
 #include <maya/style/theme.hpp>
-#include <maya/widget/app_layout.hpp>
+#include <maya/widget/agentty/app_layout.hpp>
 
 #include "agentty/runtime/app/update/internal.hpp"
 #include "agentty/runtime/model.hpp"

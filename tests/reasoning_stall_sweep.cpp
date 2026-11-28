@@ -15,8 +15,8 @@
 
 #include <maya/core/anim_clock.hpp>
 #include <maya/print.hpp>
-#include <maya/widget/markdown.hpp>
-#include <maya/widget/reasoning.hpp>
+#include <maya/widget/agentty/markdown.hpp>
+#include <maya/widget/agentty/reasoning.hpp>
 
 #include <cstdio>
 #include <cstdlib>

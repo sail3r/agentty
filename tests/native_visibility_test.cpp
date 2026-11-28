@@ -40,7 +40,7 @@
 #include <maya/render/canvas.hpp>
 #include <maya/render/renderer.hpp>
 #include <maya/style/theme.hpp>
-#include <maya/widget/app_layout.hpp>
+#include <maya/widget/agentty/app_layout.hpp>
 #include <nlohmann/json.hpp>
 
 #include "agentty/domain/ui_theme.hpp"

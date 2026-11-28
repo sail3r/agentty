@@ -21,7 +21,7 @@
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_body_preview.hpp"
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_helpers.hpp"
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_args.hpp"
-#include "maya/widget/tool_body_preview.hpp"
+#include "maya/widget/agentty/tool_body_preview.hpp"
 #include <maya/core/anim_clock.hpp>
 #include <maya/render/canvas.hpp>
 #include <maya/render/renderer.hpp>
