@@ -27,6 +27,7 @@
 
 #include "agentty/domain/stats/tabs.hpp"
 #include "agentty/runtime/panel/stats.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 namespace {
@@ -184,7 +185,7 @@ Element stats_panel(const Model& m) {
     // to switch to.
     std::vector<Hint> keys;
     if (visible.size() > 1) keys.push_back({"tab", "switch view", 3});
-    keys.push_back({"\xe2\x86\x91\xe2\x86\x93", "scroll", 5});   // ↑↓
+    keys.push_back({ui::mark::updown, "scroll", 5});   // ↑↓
     keys.push_back({"esc", "close", 4});
     cfg.footer.push_back(key_hints(std::move(keys)));
     return maya::Panel{std::move(cfg)}.build();

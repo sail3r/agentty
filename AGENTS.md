@@ -45,6 +45,11 @@ Details: [docs/website/building.md](docs/website/building.md).
   maya; panel rows are `maya::Line`s, CLI output is `maya::report`
   (`Table`, `check`, `print`), the Ctrl+G runner's tty bytes are
   `maya::RunTranscript`.
+- agentty never picks a colour, weight or glyph: it names a role from
+  `maya::look` (`ui::ink`, `ui::tone`, `ui::mark`, or the `ui::` aliases)
+  and passes facts (a tool's category, a model's family). So the WHOLE look
+  changes by editing `third_party/maya/.../widget/agentty/` alone. See
+  [docs/LOOK.md](docs/LOOK.md).
 - `ctest -R no_ui_in_agentty` enforces it (no allowlist), and
   `ctest -R ui_snapshots` pins every screen byte-for-byte; update the
   snapshots with `tests/ui_snapshots.sh build/tool_gallery --update` only

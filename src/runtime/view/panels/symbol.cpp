@@ -4,6 +4,7 @@
 // owns every chrome decision. Shared scaffolding: panels_prologue.hpp.
 
 #include "panels_prologue.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -66,7 +67,7 @@ Element symbol_panel(const Model& m) {
 
     // Same gap as the @ picker: the keys worked, nothing said so.
     cfg.footer.push_back(key_hints({
-        {"\xe2\x86\x91\xe2\x86\x93", "move", 5},   // ↑↓
+        {ui::mark::updown, "move", 5},   // ↑↓
         {"Enter", matches.empty() ? "" : "insert", 6},
         {"Esc", "close", 4},
     }));

@@ -35,6 +35,7 @@
 #include "agentty/tool/util/handoff_gate.hpp"     // handoff_feed()
 
 #include <string>
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -84,11 +85,11 @@ namespace {
         // on a default policy these are the common case and would dominate a
         // line meant for real problems.
         if (w.not_requested) continue;
-        if (!out.empty()) out += "  \xc2\xb7  ";
+        if (!out.empty()) out += ui::mark::gap_sep;
         out += w.name + ": " + w.strength;
         if (!w.mechanism.empty()) out += " (" + w.mechanism + ")";
     }
-    if (!out.empty()) out = "weaker than asked \xe2\x80\xa2 " + out;
+    if (!out.empty()) out = std::string{"weaker than asked "} + ui::mark::bullet + " " + out;
     else
         out = "every wall this policy asks for is enforced strongly";
 
@@ -125,13 +126,13 @@ namespace {
     // `sandbox.broker`), which is where you go when three is not enough.
     std::size_t shown = 0;
     for (auto it = feed.rbegin(); it != feed.rend() && shown < 3; ++it, ++shown) {
-        if (shown) out += "  \xc2\xb7  ";
+        if (shown) out += ui::mark::gap_sep;
         // A file the box refused (record_denials) is its path; a brokered
         // syscall is the call and its arguments.
         out += it->syscall == "file" ? it->detail : it->syscall + " " + it->detail;
         // The count only when it is >1: "× 1" is noise, "× 4096" is the
         // difference between a stray call and a loop hammering a denial.
-        if (it->count > 1) out += " \xc3\x97 " + std::to_string(it->count);
+        if (it->count > 1) out += std::string{" "} + ui::mark::times + " " + std::to_string(it->count);
     }
     if (feed.size() > shown)
         out += "  (+" + std::to_string(feed.size() - shown) + " more in the log)";
@@ -157,7 +158,7 @@ namespace {
     std::string out = "host-trusted writes: ";
     std::size_t shown = 0;
     for (auto it = feed.rbegin(); it != feed.rend() && shown < 2; ++it, ++shown) {
-        if (shown) out += "  \xc2\xb7  ";
+        if (shown) out += ui::mark::gap_sep;
         // The basename, not the full path: the footer is narrow and the
         // interesting half of "/home/x/repo/.vscode/tasks.json" is the end.
         std::string_view p{it->write.path};
@@ -271,14 +272,14 @@ maya::Element sandbox_list_panel(const Model& m) {
             const auto total = o->pane.complete.filtered().size();
             const auto win = o->pane.complete.visible(3);
             const auto sel = o->pane.complete.index();
-            std::string line = "\xe2\x86\x91\xe2\x86\x93 pick \xc2\xb7 Tab completes \xc2\xb7 ";
+            std::string line = std::string{ui::mark::updown} + " pick" + ui::mark::sep + "Tab completes" + ui::mark::sep;
             for (std::size_t i = 0; i < hits.size(); ++i) {
                 if (i) line += "   ";
                 // Compare against the window's absolute position, not the
                 // loop index: the two only agree while the window is at the
                 // top, which is exactly the case that used to be the only one.
                 if (win.first + i == static_cast<std::size_t>(sel))
-                    line += "\xe2\x96\xb8 ";
+                    line += std::string{ui::mark::cursor} + " ";
                 line += *hits[i];
             }
             if (total > hits.size())

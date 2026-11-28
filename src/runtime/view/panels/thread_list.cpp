@@ -13,6 +13,7 @@
 
 #include <filesystem>
 #include <optional>
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -46,14 +47,14 @@ using PeekKind = maya::PeekCard::Kind;
     pc.title = std::string{ui::shown_title(meta)};
     const auto now = m.wall_at(maya::anim_now());
     pc.facts = short_age(meta.updated_at, now) + " ago";
-    if (meta.message_count > 0) pc.facts += " \xc2\xb7 " + std::to_string(meta.message_count) + " msgs";
+    if (meta.message_count > 0) pc.facts += ui::mark::sep + std::to_string(meta.message_count) + " msgs";
     std::vector<std::string> sub;
     if (!meta.workspace.empty()) sub.push_back(workspace_name(meta.workspace));
-    if (!meta.forked_from.empty()) sub.push_back("\xe2\x91\x82 fork");   // ⑂
+    if (!meta.forked_from.empty()) sub.push_back(std::string{ui::mark::fork} + " fork");   // ⑂
     if (meta.imported) sub.push_back("from " + foreign::display_name(meta.imported->source));
     if (meta.auto_titled && !meta.user_named() && !meta.imported) sub.push_back("auto-named");
     for (std::size_t i = 0; i < sub.size(); ++i)
-        pc.subtitle += (i ? " \xc2\xb7 " : "") + sub[i];
+        pc.subtitle += (i ? ui::mark::sep : "") + sub[i];
     // Enter on a session from another tool brings it in; say so.
     const std::string enter = meta.foreign_only ? "Enter continue here" : "Enter open";
 
@@ -101,8 +102,8 @@ using PeekKind = maya::PeekCard::Kind;
         lines.erase(lines.begin(), lines.end() - std::max(0, room));
     while (!lines.empty() && lines.front().kind == PeekKind::Gap) lines.erase(lines.begin());
     pc.lines.insert(pc.lines.end(), lines.begin(), lines.end());
-    pc.hint = "\xe2\x86\x90 \xe2\x86\x92 turn " + std::to_string(last + 1) + "/"
-            + std::to_string(n) + " \xc2\xb7 " + enter;
+    pc.hint = std::string{ui::mark::back} + " " + ui::mark::arrow + " turn " + std::to_string(last + 1) + "/"
+            + std::to_string(n) + ui::mark::sep + enter;
     return pc;
 }
 
@@ -160,8 +161,7 @@ Element thread_list_panel(const Model& m) {
             picker->rename_input,
             static_cast<std::size_t>(std::max(0, picker->rename_cursor)),
             panel_terminal_cols() - 14, &at);
-        const auto caret = Style{}.with_fg(info).with_conceal()
-                                  .with_caret_anchor().with_caret_shape(1);
+        const auto caret = ui::tone::caret(info);
         cfg.header.push_back(maya::Line{{"  rename  ", fg_of(info)}, {shown.substr(0, at), fg_bold(fg)}, {shown.substr(at, 3), caret}, {shown.substr(at + 3), fg_bold(fg)}});
         cfg.header.push_back(maya::Line::rule());
     } else if (!m.d.threads.empty()) {
@@ -201,10 +201,10 @@ Element thread_list_panel(const Model& m) {
             Panel::Item row;
             // "● " marks the thread you're IN, "⑂ " a fork. Others get a
             // two-space gutter so titles stay column-aligned.
-            const char* mark = is_current            ? "\xe2\x97\x8f "    // ●
-                             : !t.forked_from.empty() ? "\xe2\x91\x82 "   // ⑂
-                             :                          "  ";
-            row.leading        = std::string{mark} + std::string{ui::shown_title(t)};
+            const std::string mark = is_current            ? std::string{ui::mark::on} + " "
+                                   : !t.forked_from.empty() ? std::string{ui::mark::fork} + " "
+                                   :                          std::string{"  "};
+            row.leading        = mark + std::string{ui::shown_title(t)};
             // Thread TITLES are what you are choosing between — full
             // foreground. Same hierarchy rule as the model/provider pickers.
             row.leading_style  = is_current ? fg_bold(info) : fg_of(fg);
@@ -217,7 +217,7 @@ Element thread_list_panel(const Model& m) {
                     row.highlight_fg = info;
                 }
             if (confirming) {
-                row.badge       = "\xe2\x9a\xa0";           // ⚠
+                row.badge       = ui::mark::warn;           // ⚠
                 row.badge_style = fg_of(warn);
                 row.leading_style = fg_bold(warn);
                 row.trailing       = "press ^D again to confirm";
@@ -233,10 +233,10 @@ Element thread_list_panel(const Model& m) {
                 // Where it came from: "codex" / "claude" before the count.
                 // A session not opened yet is dim, an opened one plain.
                 if (t.imported) {
-                    row.badge       = t.foreign_only ? "\xe2\x86\x97" : "";   // ↗
+                    row.badge       = t.foreign_only ? ui::mark::external : "";   // ↗
                     row.badge_style = fg_dim(info);
                     row.trailing = foreign::display_name(t.imported->source)
-                                 + " \xc2\xb7 " + row.trailing;
+                                 + ui::mark::sep + row.trailing;
                     if (t.foreign_only && !is_current)
                         row.leading_style = fg_of(text_secondary);
                 }
@@ -269,7 +269,7 @@ Element thread_list_panel(const Model& m) {
         const bool emptied = picker->rename_input.empty();
         cfg.footer.push_back(key_hints({
             {"type", "edit title", 5},
-            {"\xe2\x86\x90\xe2\x86\x92", "move", 4},   // left/right arrows
+            {ui::mark::leftright, "move", 4},   // left/right arrows
             {"Enter", emptied ? "use automatic name" : "save", 5},
             {"Esc", "cancel", 5},
         }));
@@ -277,7 +277,7 @@ Element thread_list_panel(const Model& m) {
     }
     std::vector<Hint> keys{
         {"type", "filter", 5},
-        {"\xe2\x86\x91\xe2\x86\x93", "move", 5},        // ↑↓
+        {ui::mark::updown, "move", 5},        // ↑↓
         {"Home/End", "jump", 2},
     };
     // Tab steps all → this folder → Codex & Claude, skipping empty ones;

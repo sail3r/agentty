@@ -4,6 +4,7 @@
 // owns every chrome decision. Shared scaffolding: panels_prologue.hpp.
 
 #include "panels_prologue.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -33,7 +34,7 @@ Element code_blocks_panel(const Model& m) {
     for (const auto& b : o->blocks) {
         const bool runnable = code_blocks::is_shell_language(b.language);
         const std::string lang = b.language.empty() ? std::string{"sh"} : b.language;
-        const std::string bd = runnable ? std::string{" \xe2\x96\xb6 "}
+        const std::string bd = runnable ? std::string{std::string{" "} + ui::mark::play + " "}
                                         : " " + lang + " ";
         badge_w = std::max(badge_w, string_width(bd));
     }
@@ -59,8 +60,8 @@ Element code_blocks_panel(const Model& m) {
         // glance): a ` ▶ ` play glyph in the success hue for a runnable
         // block, or the language tag in muted for one we can only edit/copy.
         if (runnable) {
-            row.badge       = " \xe2\x96\xb6 ";           // ▶
-            row.badge_style = Style{}.with_fg(success).with_bold();
+            row.badge       = std::string{" "} + ui::mark::play + " ";           // ▶
+            row.badge_style = fg_bold(success);
         } else {
             row.badge       = " " + lang + " ";
             row.badge_style = fg_dim(muted);
@@ -75,7 +76,7 @@ Element code_blocks_panel(const Model& m) {
         // moved into meaning (the ▶ badge), so the tag here is just the
         // dialect; for a non-runnable one the badge already carries it, so
         // show only the size to avoid repeating the tag.
-        row.trailing = (runnable ? lang + " \xc2\xb7 " : std::string{})
+        row.trailing = (runnable ? lang + ui::mark::sep : std::string{})
                      + std::to_string(b.line_count)
                      + (b.line_count == 1 ? " line" : " lines");
         row.trailing_style = fg_dim(muted);
@@ -84,7 +85,7 @@ Element code_blocks_panel(const Model& m) {
 
     cfg.footer.push_back(maya::Line::blank());
     cfg.footer.push_back(key_hints({
-        {"↑↓", "move", 5},        // ↑↓
+        {ui::mark::updown, "move", 5},        // ↑↓
         {"Enter/1-9", "run", 3},
         {"e", "edit", 4},
         {"y", "copy", 4},
@@ -118,7 +119,7 @@ Element code_block_result_panel(const Model& m) {
         // First line only — a multi-line block reads badly in a header.
         if (auto eol = cmd_line.find('\n'); eol != std::string::npos) {
             cmd_line.resize(eol);
-            cmd_line += " \xe2\x80\xa6";   // …
+            cmd_line += std::string{" "} + ui::mark::ellipsis;   // …
         }
         cfg.header.push_back(maya::Line{{"$ ", fg_bold(cfg.accent)}, {std::move(cmd_line), fg_of(fg)}});
         std::size_t lines = r->output.empty() ? 0 : 1;
@@ -126,7 +127,7 @@ Element code_block_result_panel(const Model& m) {
         std::string status = r->timed_out
             ? "timed out"
             : "exit " + std::to_string(r->exit_code);
-        status += " \xc2\xb7 " + std::to_string(lines) + " lines \xc2\xb7 ";
+        status += ui::mark::sep + std::to_string(lines) + " lines \xc2\xb7 ";
         status += (r->output.size() >= 1024)
             ? std::to_string(r->output.size() / 1024) + " KB"
             : std::to_string(r->output.size()) + " B";
@@ -192,7 +193,7 @@ Element code_block_result_panel(const Model& m) {
                 body.fill = true;
                 cache.rows.push_back(Line::row({
                     Span{"  " + num + " ", fg_dim(warn)},
-                    Span{"\xe2\x94\x82 ", fg_dim(pipe_hue)},   // │
+                    Span{std::string{ui::mark::rail_thin} + " ", fg_dim(pipe_hue)},   // │
                     std::move(body)}));
             }
         }
@@ -216,7 +217,7 @@ Element code_block_result_panel(const Model& m) {
     // the manual window has no scrollbar, so this is the affordance that
     // there is more output above/below (same grammar as the tool viewer).
     if (total_rows > vh) {
-        cfg.footer.push_back(maya::Line{"  " + std::to_string(first + 1) + "\xe2\x80\x93"   // –
+        cfg.footer.push_back(maya::Line{"  " + std::to_string(first + 1) + ui::mark::range   // –
                  + std::to_string(last) + " / "
                  + std::to_string(total_rows) + " lines", fg_dim(muted)});
     }

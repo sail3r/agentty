@@ -15,6 +15,7 @@
 
 #include "agentty/rag/rag_adapter.hpp"
 #include <maya/widget/agentty/report.hpp>
+#include <maya/widget/agentty/look.hpp>
 #include "agentty/util/callback.hpp"
 #include "agentty/rag/rag_host.hpp"
 #include "agentty/rag/vector_cache.hpp"
@@ -3036,7 +3037,7 @@ int run(const std::string& root) {
 
         const std::size_t k = 10;
         namespace rep = maya::report;
-        const maya::Style head = maya::Style{}.with_bold();
+        const maya::Style head = maya::look::tone::bold();
         rep::Table ladder_t;
         ladder_t.rows.push_back({{"stage", head}, {"recall@" + std::to_string(k), head},
                                  {"MRR", head}, {"nDCG@10", head}, {"ms/query", head}});

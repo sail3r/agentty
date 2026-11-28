@@ -27,14 +27,10 @@ namespace fs = std::filesystem;
 
 namespace {
 
-// The ONE file allowed to spell colours: the semantic palette itself.
-//
-// palette.hpp is where agentty's tokens are defined, and each one is a
-// theme-slot read (AGENTTY_THEME_SLOT) rather than a literal — so it is
-// exempt from the scan but not from the rule.
-const std::vector<std::string> kAllowed = {
-    "include/agentty/runtime/view/palette.hpp",
-};
+// No file is allowed to spell colours. agentty's names (ui::accent …) are
+// aliases into maya::look, which lives in maya's agentty folder; agentty
+// itself has nothing to exempt.
+const std::vector<std::string> kAllowed = {};
 
 // The one file allowed to write RAW SGR escapes.
 //
@@ -43,9 +39,7 @@ const std::vector<std::string> kAllowed = {
 // cannot go through the theme. It still honours maya's tier detection for
 // whether to emit colour at all, which is the part a user can observe
 // (NO_COLOR / TERM=dumb).
-const std::vector<std::string> kAllowedRawSgr = {
-    "src/runtime/app/cmd_code_block_run.cpp",
-};
+const std::vector<std::string> kAllowedRawSgr = {};   // the runner's bytes are maya::RunTranscript's
 
 [[nodiscard]] bool listed(const std::vector<std::string>& list,
                           const std::string& rel) {

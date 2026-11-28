@@ -2,6 +2,7 @@
 
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_args.hpp"
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_helpers.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -37,8 +38,8 @@ std::string args_lines(const nlohmann::json& args) {
         if (it.key() == "display_description") continue;
         std::string v = it->is_string() ? it->get<std::string>() : it->dump();
         if (auto nl = v.find('\n'); nl != std::string::npos)
-            v = v.substr(0, nl) + " \xe2\x80\xa6";
-        if (v.size() > 96) { v.resize(95); v += "\xe2\x80\xa6"; }
+            v = v.substr(0, nl) + std::string{" "} + ui::mark::ellipsis;
+        if (v.size() > 96) { v.resize(95); v += ui::mark::ellipsis; }
         if (!out.empty()) out += '\n';
         out += it.key() + "  " + v;
     }
@@ -92,12 +93,12 @@ maya::Permission::Config inline_permission_config(const PendingPermission& pp,
             extra += "in " + cd;
         if (auto it = tc.args.find("env");
             it != tc.args.end() && it->is_object() && !it->empty()) {
-            if (!extra.empty()) extra += "  \xc2\xb7  ";
+            if (!extra.empty()) extra += ui::mark::gap_sep;
             extra += "env";
             for (auto e = it->begin(); e != it->end(); ++e) {
                 std::string v = e.value().is_string()
                     ? e.value().get<std::string>() : e.value().dump();
-                if (v.size() > 48) { v.resize(47); v += "\xe2\x80\xa6"; }
+                if (v.size() > 48) { v.resize(47); v += ui::mark::ellipsis; }
                 extra += " " + e.key() + "=" + v;
             }
         }
@@ -108,7 +109,7 @@ maya::Permission::Config inline_permission_config(const PendingPermission& pp,
         // routinely pick filepath/filename for the others.
         desc = pick_arg(tc.args, {"path", "file_path", "filepath", "filename"});
     } else if (n == "move") {
-        desc = pick_arg(tc.args, {"source"}) + "  \xe2\x86\x92  "
+        desc = pick_arg(tc.args, {"source"}) + std::string{"  "} + ui::mark::arrow + "  "
              + pick_arg(tc.args, {"destination"});
     } else if (n == "web_fetch") {
         desc = tc.args.value("url", "");
@@ -140,7 +141,7 @@ maya::Permission::Config inline_permission_config(const PendingPermission& pp,
             for (std::size_t i = cut; i < cfg.description.size(); ++i)
                 rest += cfg.description[i] == '\n';
             cfg.description.resize(cut);
-            cfg.description += "\n\xe2\x8b\xaf " + std::to_string(rest) + " more lines";
+            cfg.description += std::string{"\n"} + ui::mark::more + " " + std::to_string(rest) + " more lines";
         }
     }
     return cfg;

@@ -60,7 +60,7 @@ Element dim(std::string s) { return words(std::move(s), ui::fg_dim(ui::muted)); 
 Element ok(std::string s) { return words(std::move(s), ui::fg_bold(ui::status_ok)); }
 Element warn(std::string s) { return words(std::move(s), ui::fg_bold(ui::status_warn)); }
 Element bad(std::string s) { return words(std::move(s), ui::fg_bold(ui::status_error)); }
-Element code(std::string s) { return words(std::move(s), maya::Style{}.with_fg(ui::accent)); }
+Element code(std::string s) { return words(std::move(s), ui::fg_of(ui::accent)); }
 
 const char* dot() { return "\xc2\xb7"; }   // ·
 

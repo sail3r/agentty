@@ -20,6 +20,7 @@
 
 #include "agentty/tool/util/utf8.hpp"
 #include "agentty/domain/question.hpp"   // a settled question's record
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -282,7 +283,7 @@ maya::ToolBodyPreview::Config tool_body_preview_config(
                                                           : parsed.questions[i].header)
                     : std::string{};
                 std::string row = asked.empty() ? answers[i]
-                                                : asked + "  \xe2\x86\x92  " + (answers[i].empty() ? "no answer" : answers[i]);
+                                                : asked + std::string{"  "} + ui::mark::arrow + "  " + (answers[i].empty() ? "no answer" : answers[i]);
                 out.todos.push_back({std::move(row), answers[i].empty() ? Status::Pending
                                                                         : Status::Completed});
             }

@@ -12,6 +12,7 @@
 
 #include <maya/widget/agentty/key_hints.hpp>
 #include "agentty/runtime/view/palette.hpp"   // color tokens (fg, muted…)
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -40,7 +41,7 @@ struct Hint {
 [[nodiscard]] inline maya::Element filter_header(std::string_view query,
                                                 std::string_view noun = {},
                                                 std::optional<maya::Color> caret = {},
-                                                std::string_view glyph = "\xf0\x9f\x94\x8d ") {
+                                                std::string_view glyph = ui::mark::search_field) {
     maya::FilterLine::Config cfg;
     cfg.query = std::string{query};
     cfg.noun  = std::string{noun};

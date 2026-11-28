@@ -17,6 +17,7 @@
 #include "panels_prologue.hpp"
 #include "agentty/runtime/view/form_panel.hpp"
 #include "agentty/runtime/panel/appearance.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -101,7 +102,7 @@ namespace {
     cfg.footer.push_back(maya::Line::rule());
     cfg.footer.push_back(maya::Line{"  Moving applies it \xe2\x80\x94 you are looking at the preview.", fg_dim(muted)});
     cfg.footer.push_back(key_hints({
-        {"\xe2\x86\x91\xe2\x86\x93", "preview", 5},   // ↑↓
+        {ui::mark::updown, "preview", 5},   // ↑↓
         {"Enter", "keep", 3},
         {"Esc", "revert", 4},
     }));

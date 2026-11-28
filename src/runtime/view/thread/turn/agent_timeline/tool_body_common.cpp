@@ -9,6 +9,7 @@
 #include <maya/platform/io.hpp>
 
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_args.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui::detail {
 
@@ -81,7 +82,7 @@ std::string head_window(std::string_view s, std::size_t keep_lines) {
     if (total_lines <= keep_lines) return std::string{s};
     std::string out{s.substr(0, end)};
     std::size_t more = total_lines - keep_lines;
-    out += "\n\xe2\x8b\xaf " + std::to_string(more)
+    out += std::string{"\n"} + ui::mark::more + " " + std::to_string(more)
          + (more == 1 ? " more line" : " more lines");  // ⋯
     return out;
 }

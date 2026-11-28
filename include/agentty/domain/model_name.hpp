@@ -134,6 +134,7 @@
 #include <maya/style/color.hpp>
 
 #include "agentty/domain/catalog.hpp"
+#include <maya/widget/agentty/look.hpp>
 
 namespace agentty::model_name {
 
@@ -150,35 +151,19 @@ namespace agentty::model_name {
 // "remember to update the widget too".
 [[nodiscard]] constexpr maya::Color color_of(
     ModelCapabilities::Family f) noexcept {
+    // Which lane a family is in; the lane's hue is maya::look::ink::family's.
     using F = ModelCapabilities::Family;
-    using S = maya::ThemeSlot;
-    // SLOTS, not literals. A family hue is a ROLE ("flagship", "workhorse",
-    // "fast") and roles are exactly what a theme assigns colour to. As
-    // literals these were the last thing on screen still painting in named
-    // ANSI on an all-RGB scheme — a magenta badge that stayed magenta no
-    // matter what the user picked.
-    //
-    // A slot also keeps this file honest about its layer: domain code can
-    // now name a role without reaching for a pixel, and the resolution
-    // happens in maya at paint time.
+    using L = maya::look::ink::Family;
     switch (f) {
-        // Flagship lane — the accent hue, the theme's "this is special".
-        case F::Opus:   return maya::Color::slot(S::Accent);
-        case F::Fable:  return maya::Color::slot(S::Accent);
-        case F::Mythos: return maya::Color::slot(S::Accent);
-        // Workhorse — the primary hue.
-        case F::Sonnet: return maya::Color::slot(S::Primary);
-        // Fast/agile — link, a cyan-family slot in every scheme. NOT
-        // success: green is status_ok and collided with the ✓ done icon.
-        case F::Haiku:  return maya::Color::slot(S::Link);
-        // OpenAI gpt-5.x Responses line.
-        case F::Gpt:    return maya::Color::slot(S::Info);
-        // Unknown family (local model, aggregator id, a line we don't know
-        // yet). Neutral info — it is still a model, just not one we can
-        // place in a lane.
-        case F::Unknown: return maya::Color::slot(S::Info);
+        case F::Opus:    return maya::look::ink::family(L::Flagship);
+        case F::Fable:   return maya::look::ink::family(L::Flagship);
+        case F::Mythos:  return maya::look::ink::family(L::Flagship);
+        case F::Sonnet:  return maya::look::ink::family(L::Workhorse);
+        case F::Haiku:   return maya::look::ink::family(L::Fast);
+        case F::Gpt:     return maya::look::ink::family(L::OpenAI);
+        case F::Unknown: return maya::look::ink::family(L::Unknown);
     }
-    return maya::Color::slot(S::Info);   // unreachable; switch is exhaustive
+    return maya::look::ink::family(L::Unknown);   // unreachable; switch is exhaustive
 }
 
 // The canonical display spelling of a known family. Empty for Unknown —
@@ -249,7 +234,7 @@ struct ModelName {
     // Family hue from the table above. A theme SLOT, like everything
     // color_of() returns — a default here that was a literal would quietly
     // pin any un-decoded model to one palette.
-    maya::Color color = maya::Color::slot(maya::ThemeSlot::Info);
+    maya::Color color = maya::look::ink::family(maya::look::ink::Family::Unknown);
 
     // True when the id decoded to a KNOWN family. When false, `name` came
     // from the id/server-name normalizer rather than the family table, and
@@ -336,9 +321,9 @@ static_assert(every_known_family_is_labelled(),
 // it would pass no matter what, which is worse than not having it.
 consteval bool no_family_uses_a_status_hue() {
     const maya::Color banned[] = {
-        maya::Color::slot(maya::ThemeSlot::Success),
-        maya::Color::slot(maya::ThemeSlot::Warning),
-        maya::Color::slot(maya::ThemeSlot::Error),
+        maya::look::ink::status_ok,
+        maya::look::ink::status_warn,
+        maya::look::ink::status_error,
     };
     for (auto f : kAllFamilies)
         for (const auto& b : banned)

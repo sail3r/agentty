@@ -4,6 +4,7 @@
 // owns every chrome decision. Shared scaffolding: panels_prologue.hpp.
 
 #include "panels_prologue.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -29,7 +30,7 @@ Element palette_panel(const Model& m) {
     cfg.selected   = matches.empty() ? -1 : o->index;
 
     cfg.header.push_back(
-        filter_header(o->query, {}, highlight, "\xe2\x8c\x98 "));   // ⌘
+        filter_header(o->query, {}, highlight, std::string{ui::mark::cmd} + " "));   // ⌘
     // Rule under the filter — the same `sep` every other picker draws, so the
     // query box is separated from its results identically everywhere.
     cfg.header.push_back(maya::Line::rule());
@@ -132,7 +133,7 @@ Element palette_panel(const Model& m) {
                 + std::to_string(matches.size()) + " commands", fg_dim(muted)});
     }
     cfg.footer.push_back(key_hints({
-        {"\xe2\x86\x91\xe2\x86\x93", "move", 5},   // ↑↓
+        {ui::mark::updown, "move", 5},   // ↑↓
         {"type", "filter", 3},
         {"Enter", "run", 6},
         {"Esc", "close", 3},

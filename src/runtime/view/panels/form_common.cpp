@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <utility>
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -53,7 +54,7 @@ namespace ff = agentty::form::field;
             // a cleared port reads as an empty field, not as its minimum).
             if (editing_this_row)
                 return maya::panel::Text{agentty::form::number_text(v), caret,
-                                         std::to_string(v.min) + "\xe2\x80\x93"
+                                         std::to_string(v.min) + ui::mark::range
                                              + std::to_string(v.max)};
             return maya::panel::Number{v.value, caret};
         }
@@ -118,12 +119,12 @@ maya::Panel::Config form_config(const agentty::form::Form& f, maya::Color accent
             // The grammar describes what the keyboard ACTUALLY does.
             // There is no save key: leaving a field writes it, and Esc
             // leaves. Editing says "↵ done" because that IS the write.
-            if (f.editing())        grammar = "type · ←→ caret · ↵ done · esc cancel";
-            else if (f.choosing())  grammar = "↑↓ pick · ↵ choose · esc keep";
-            else                    grammar = "↑↓ rows · type to edit · esc back";
+            if (f.editing())        grammar = std::string{"type"} + ui::mark::sep + ui::mark::leftright + " caret" + ui::mark::sep + ui::mark::enter + " done" + ui::mark::sep + "esc cancel";
+            else if (f.choosing())  grammar = std::string{ui::mark::updown} + " pick" + ui::mark::sep + ui::mark::enter + " choose" + ui::mark::sep + "esc keep";
+            else                    grammar = std::string{ui::mark::updown} + " rows" + ui::mark::sep + "type to edit" + ui::mark::sep + "esc back";
             if (f.dirty && !f.editing() && !f.choosing())
                 grammar += "  ·  unsaved";
-            line = f.note.empty() ? grammar : (f.note + "   ·   " + grammar);
+            line = f.note.empty() ? grammar : (f.note + std::string{" "} + ui::mark::gap_sep + " " + grammar);
         }
         cfg.note = std::move(line);
 

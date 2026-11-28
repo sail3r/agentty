@@ -4,6 +4,7 @@
 // owns every chrome decision. Shared scaffolding: panels_prologue.hpp.
 
 #include "panels_prologue.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -53,7 +54,7 @@ Element mention_panel(const Model& m) {
             // fixed width so leading text aligns across rows.
             if (auto tag = file_git_tag(path); tag != GitTag::None) {
                 auto label = git_tag_label(tag);
-                row.badge = "● " + std::string{label};
+                row.badge = std::string{ui::mark::on} + " " + std::string{label};
                 row.badge_style =
                     tag == GitTag::Modified          ? fg_of(ui::status_warn)
                   : tag == GitTag::Staged            ? fg_of(ui::status_ok)
@@ -87,7 +88,7 @@ Element mention_panel(const Model& m) {
     // advertised, so the only way to learn them was to guess. Same grammar
     // as the command palette.
     cfg.footer.push_back(key_hints({
-        {"\xe2\x86\x91\xe2\x86\x93", "move", 5},   // ↑↓
+        {ui::mark::updown, "move", 5},   // ↑↓
         {"Enter", matches.empty() ? "" : "insert", 6},
         {"Esc", "close", 4},
     }));

@@ -25,6 +25,12 @@ All notable changes to agentty. Versions follow [SemVer](https://semver.org/).
   everywhere, so non-ASCII cells no longer go ragged. A lint
   (`no_ui_in_agentty`) fails the build on any raw escape, hand-built
   styled text or `printf` column layout in agentty.
+- **The whole look is one folder.** agentty no longer picks a colour,
+  weight or glyph anywhere: it names roles from `maya::look` (`ink`,
+  `tone`, `mark`) and passes facts (a tool's category, a model's family),
+  and the folder decides what they look like. Restyling agentty, down to
+  the check mark, is an edit to `third_party/maya/.../widget/agentty/`
+  alone. See `docs/LOOK.md`.
 
 ## [0.9.65] - 2026-11-27
 

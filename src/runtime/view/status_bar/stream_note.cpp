@@ -1,3 +1,4 @@
+#include <maya/widget/agentty/look.hpp>
 #include "agentty/runtime/view/status_bar/stream_note.hpp"
 #include <maya/core/anim_clock.hpp>   // anim_now: the frame clock
 
@@ -31,7 +32,7 @@ maya::StreamNote::Config stream_note_config(const Model& m) {
     const auto* a = active_ctx(m.s.phase);
     if (!a || m.s.compacting) return cfg;
     const auto now = maya::anim_now();
-    const auto warn = maya::Color::slot(maya::ThemeSlot::Warning);
+    const auto warn = maya::look::ink::status_warn;
 
     // The attempt number rides in the TAIL: the note truncates its text
     // from the end, and "2/6" is the part that must survive a narrow row.
@@ -56,7 +57,7 @@ maya::StreamNote::Config stream_note_config(const Model& m) {
         const auto quiet = duration_cast<seconds>(now - a->last_event_at).count();
         cfg.text = "no data for " + std::to_string(std::max<long long>(quiet, 0))
                  + "s \xc2\xb7 reconnecting";
-        cfg.tone = maya::Color::slot(maya::ThemeSlot::Error);
+        cfg.tone = maya::look::ink::status_error;
         return cfg;
     }
     if (!a->retry_why.empty()) {
@@ -71,7 +72,7 @@ maya::StreamNote::Config stream_note_config(const Model& m) {
         return cfg;
     if (a->gateway_buffered) {
         cfg.text = "a proxy is holding the reply \xc2\xb7 it lands in one burst";
-        cfg.tone = maya::Color::slot(maya::ThemeSlot::Info);
+        cfg.tone = maya::look::ink::status_info;
         return cfg;
     }
     // Under ~3 s nobody wonders; a note that flickers on every turn is noise.
@@ -81,7 +82,7 @@ maya::StreamNote::Config stream_note_config(const Model& m) {
     const bool local = sel.kind == provider::Kind::OpenAI && !sel.openai_endpoint.use_tls;
     cfg.text = local ? "the model is reading the prompt"
                      : "waiting for the first token";
-    cfg.tone = maya::Color::slot(maya::ThemeSlot::Info);
+    cfg.tone = maya::look::ink::status_info;
     return cfg;
 }
 

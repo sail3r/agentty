@@ -79,6 +79,7 @@
 
 #include <maya/maya.hpp>
 #include <maya/widget/agentty/report.hpp>
+#include <maya/widget/agentty/look.hpp>
 #include <maya/host/run.hpp>   // maya::run: the jaal host
 #include <maya/platform/io.hpp>   // query_terminal_size (sandbox banner)
 #include "agentty/runtime/app/host.hpp"   // agentty::app::Host
@@ -672,9 +673,9 @@ void print_usage() {
     constexpr int kOptGutter  = 23;   // "  -w, --workspace DIR " + a space
 
     auto body = maya::report::doc({
-        maya::report::words(std::string{"agentty "} + ::agentty::version(), maya::Style{}.with_bold()),
+        maya::report::words(std::string{"agentty "} + ::agentty::version(), maya::look::tone::bold()),
         gap(),
-        maya::report::words("usage: agentty [subcommand] [options]", maya::Style{}.with_dim()),
+        maya::report::words("usage: agentty [subcommand] [options]", maya::look::tone::dim()),
         gap(),
         heading("subcommands"),
         entry("  login", "Authenticate (API key, or OAuth via claude.ai)", kCmdGutter),

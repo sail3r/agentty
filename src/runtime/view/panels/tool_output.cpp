@@ -18,6 +18,7 @@
 #include <format>
 
 #include "agentty/runtime/panel/tool_output.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -135,7 +136,7 @@ std::string fit_cols(std::string_view s, int w) {
     }
     std::string out{s.substr(0, i)};
     while (!out.empty() && out.back() == ' ') out.pop_back();
-    return out + "\xe2\x80\xa6";
+    return out + ui::mark::ellipsis;
 }
 } // namespace
 
@@ -181,7 +182,7 @@ Element tool_output_panel(const Model& m) {
         // hues read as a vertical colour strip.
         int badge_w = 0;
         for (const auto& e : o->entries)
-            badge_w = std::max(badge_w, e.is_live ? string_width("\xe2\x97\x8f LIVE")
+            badge_w = std::max(badge_w, e.is_live ? string_width(std::string{ui::mark::on} + " LIVE")
                                                   : string_width(e.title));
         ++badge_w;   // the widest name still gets a gap before its detail
         // Room for the detail: the overlay is 4 columns in, then border (2),
@@ -203,7 +204,7 @@ Element tool_output_panel(const Model& m) {
                 // "● LIVE" badge in the tool's hue reads as "streaming now";
                 // the detail line carries the tool name so the row is still
                 // self-describing.
-                std::string badge = "\xe2\x97\x8f LIVE";
+                std::string badge = std::string{ui::mark::on} + " LIVE";
                 const int live_w = string_width(badge);
                 if (live_w < badge_w)
                     badge.append(static_cast<std::size_t>(badge_w - live_w), ' ');
@@ -228,7 +229,7 @@ Element tool_output_panel(const Model& m) {
             row.badge_style    = e.failed ? fg_bold(danger)
                                : e.thinking ? fg_bold(role_brand)
                                             : fg_bold(cat_hue);
-            row.leading        = e.detail.empty() ? std::string{"\xe2\x80\xa6"}
+            row.leading        = e.detail.empty() ? std::string{ui::mark::ellipsis}
                                                   : fit_detail(e.detail, e.trailing);
             row.leading_style  = e.failed ? fg_of(danger) : fg_of(fg);
             row.trailing       = e.trailing;
@@ -239,7 +240,7 @@ Element tool_output_panel(const Model& m) {
         if (!compact_list) {
             cfg.footer.push_back(Line::blank());
             std::vector<Hint> list_hints{
-                {"\xe2\x86\x91\xe2\x86\x93", "move", 5},   // ↑↓
+                {ui::mark::updown, "move", 5},   // ↑↓
                 {"Enter", "view", 6},
                 {"/", "find", 4},
                 {"y", "copy", 4},
@@ -302,9 +303,9 @@ Element tool_output_panel(const Model& m) {
     };
     const std::string title = e.thinking && e.turn > 0
         ? e.title + " \xc2\xb7 turn " + std::to_string(e.turn) : e.title;
-    cfg.title    = (e.is_live || thinking_live ? std::string(" \xe2\x97\x8f LIVE \xc2\xb7 ") + title
+    cfg.title    = (e.is_live || thinking_live ? std::string(std::string{" "} + ui::mark::on + " LIVE" + ui::mark::sep) + title
                               : " " + title)
-                 + " \xc2\xb7 " + pos + " ";
+                 + ui::mark::sep + pos + " ";
     cfg.accent   = just_done ? Color{success} : tool_hue;
     cfg.selected = -1;   // read-only — no cursor row; manual scroll rules
     // Normal BODY chrome is 9 rows: border+padding (4), header+separator
@@ -332,8 +333,8 @@ Element tool_output_panel(const Model& m) {
         // Thinking says what state it's in, the transcript's way.
         const std::string head = !e.thinking ? title
                                : thinking_live ? "Thinking " + spin
-                               : just_done     ? std::string{"\xe2\x9c\x93 Done thinking"}
-                                               : std::string{"\xe2\x9c\x93 Reasoned"};   // ✓
+                               : just_done     ? std::string{std::string{ui::mark::ok} + " Done thinking"}
+                                               : std::string{std::string{ui::mark::ok} + " Reasoned"};   // ✓
         std::vector<std::string> mid;
         if (e.thinking) {
             // The facts share the header row: model, effort, kind in the
@@ -349,7 +350,7 @@ Element tool_output_panel(const Model& m) {
             if (thought_ms >= 100)
                 time = thinking_live ? clock(thought_ms)
                                      : std::format("{:.1f}s", static_cast<double>(thought_ms) / 1000.0);
-            trailing = tokens.empty() ? time : time.empty() ? tokens : time + " \xc2\xb7 " + tokens;
+            trailing = tokens.empty() ? time : time.empty() ? tokens : time + ui::mark::sep + tokens;
         }
         const Style head_st  = e.thinking && !thinking_live ? fg_bold(success) : fg_bold(tool_hue);
         const Style trail_st = e.failed ? fg_of(danger)
@@ -537,7 +538,7 @@ Element tool_output_panel(const Model& m) {
             // view of a live agent.
             if (e.is_live) {
                 std::string_view feed = e.call.progress_text();
-                if (feed.starts_with("\xe2\x97\x86 ")) {   // ◆ status line
+                if (feed.starts_with(std::string{ui::mark::diamond} + " ")) {   // ◆ status line
                     if (auto row = task_status_row(feed.substr(0, feed.find('\n'))); !row.empty())
                         cache.rows.push_back(Line::row({Span{row, fg_of(tool_hue)}}));
                 }
@@ -547,7 +548,7 @@ Element tool_output_panel(const Model& m) {
                 for (const auto& c : kids)
                     bad += c.state == S::Failed && c.output != ToolUse::kCancelledOutput;
                 std::string head = std::to_string(kids.size()) + (kids.size() == 1 ? " call" : " calls");
-                if (bad > 0) head += "  \xc2\xb7  " + std::to_string(bad) + " failed";
+                if (bad > 0) head += ui::mark::gap_sep + std::to_string(bad) + " failed";
                 head += "  \xc2\xb7  Tab to pick, Enter to open";
                 cache.rows.push_back(Line::row({Span{head, fg_dim(muted)}}));
                 const auto t0 = e.call.started_at();
@@ -559,23 +560,23 @@ Element tool_output_panel(const Model& m) {
                     const bool failed = c.state == S::Failed && !cancelled;
                     const bool selected = o->child_cursor == static_cast<int>(ci);
                     const bool open = std::ranges::find(o->child_open, c.id) != o->child_open.end();
-                    const char* icon = c.state == S::Done ? "\xe2\x9c\x93 "     // ✓
-                                     : failed ? "\xe2\x9c\x97 "                  // ✗
-                                     : cancelled ? "\xe2\x8a\x98 "               // ⊘
-                                                 : "\xe2\x97\x8b ";             // ○
+                    const std::string icon = c.state == S::Done ? std::string{ui::mark::ok} + " "
+                                     : failed ? std::string{ui::mark::fail} + " "                  // ✗
+                                     : cancelled ? std::string{ui::mark::blocked} + " "               // ⊘
+                                                 : std::string{ui::mark::off} + " ";             // ○
                     const Color ic = c.state == S::Done ? Color{success}
                                    : failed ? Color{danger} : Color{muted};
                     // Always a duration cell, so the column lines up: the
                     // time once settled, "…" while running, "–" for none.
-                    std::string dur = c.state == S::Running ? std::string{"   \xe2\x80\xa6"}
+                    std::string dur = c.state == S::Running ? std::string{std::string{"   "} + ui::mark::ellipsis}
                                     : c.ms >= 1000 ? std::format("{:.1f}s", static_cast<double>(c.ms) / 1000.0)
                                     : c.ms > 0     ? std::format("{}ms", c.ms)
-                                                   : std::string{"\xe2\x80\x93"};
+                                                   : std::string{ui::mark::range};
                     if (dur.size() < 7) dur.insert(0, 7 - std::min<std::size_t>(7, string_width(dur)), ' ');
                     Span what{tool_timeline_detail(kt), failed ? fg_of(danger) : fg_dim(fg)};
                     what.fill = true;
                     cache.rows.push_back(Line::row({
-                        Span{selected ? "\xe2\x96\xb8" : " ", fg_bold(accent)},   // ▸ cursor
+                        Span{selected ? ui::mark::cursor : " ", fg_bold(accent)},   // ▸ cursor
                         Span{icon, fg_bold(ic)},
                         Span{tool_display_name(c.name),
                              cancelled ? fg_bold(muted) : fg_bold(tool_category_color(c.name))},
@@ -597,14 +598,14 @@ Element tool_output_panel(const Model& m) {
                                 Span txt{std::string{v}, failed ? fg_of(danger) : fg_dim(fg)};
                                 txt.fill = true;
                                 cache.rows.push_back(Line::row({
-                                    Span{"   \xe2\x94\x8a ", fg_dim(failed ? danger : muted)},   // ┊
+                                    Span{std::string{"   "} + ui::mark::rail_dash + " ", fg_dim(failed ? danger : muted)},   // ┊
                                     std::move(txt)}));
                             }
                             if (nl == body.size()) break;
                             p = nl + 1;
                         }
                         if (shown_lines >= kMaxOpenLines)
-                            cache.rows.push_back(Line::row({Span{"   \xe2\x94\x8a \xe2\x8b\xaf more in the full log",
+                            cache.rows.push_back(Line::row({Span{std::string{"   "} + ui::mark::rail_dash + " " + ui::mark::more + " more in the full log",
                                                                 fg_italic(muted)}}));
                     }
                 }
@@ -629,7 +630,7 @@ Element tool_output_panel(const Model& m) {
                         const auto off = static_cast<std::size_t>(v.data() - md.plain.data());
                         Span txt = maya::ToolViewer::marked_span(md, off, v.size(), base);
                         cache.rows.push_back(Line::row({
-                            Span{"\xe2\x94\x83 ", fg_dim(tool_hue)},   // ┃
+                            Span{std::string{ui::mark::rail} + " ", fg_dim(tool_hue)},   // ┃
                             Span{first ? lead : std::string(static_cast<std::size_t>(lead_w), ' '), lead_st},
                             std::move(txt)}));
                         first = false;
@@ -640,7 +641,7 @@ Element tool_output_panel(const Model& m) {
                 bool in_code = false, any = false, pending_blank = false;
                 auto flush_blank = [&] {
                     if (pending_blank && any)
-                        cache.rows.push_back(Line::row({Span{"\xe2\x94\x83", fg_dim(tool_hue)}}));
+                        cache.rows.push_back(Line::row({Span{ui::mark::rail, fg_dim(tool_hue)}}));
                     pending_blank = false;
                     any = true;
                 };
@@ -677,7 +678,7 @@ Element tool_output_panel(const Model& m) {
                             while (body.starts_with(' ')) body.remove_prefix(1);
                             base = head_st;
                         } else if (body.starts_with("- ") || body.starts_with("* ")) {
-                            lead += "\xe2\x80\xa2 ";   // •
+                            lead += std::string{ui::mark::bullet} + " ";   // •
                             body.remove_prefix(2);
                         } else if (std::size_t d = 0;
                                    [&] { while (d < body.size() && body[d] >= '0' && body[d] <= '9') ++d;
@@ -692,7 +693,7 @@ Element tool_output_panel(const Model& m) {
                                 std::string_view cell = body.substr(i, (j == std::string_view::npos ? body.size() : j) - i);
                                 while (!cell.empty() && cell.front() == ' ') cell.remove_prefix(1);
                                 while (!cell.empty() && cell.back() == ' ') cell.remove_suffix(1);
-                                if (!cell.empty()) { if (!table.empty()) table += " \xc2\xb7 "; table += cell; }
+                                if (!cell.empty()) { if (!table.empty()) table += ui::mark::sep; table += cell; }
                                 if (j == std::string_view::npos) break;
                                 i = j + 1;
                             }
@@ -750,13 +751,13 @@ Element tool_output_panel(const Model& m) {
                 }
                 if (body.empty()) {
                     note_blank(ln.data());
-                    cache.rows.push_back(Line::row({Span{"\xe2\x94\x83", fg_dim(role_brand)}}));   // ┃
+                    cache.rows.push_back(Line::row({Span{ui::mark::rail, fg_dim(role_brand)}}));   // ┃
                 } else {
                     for (auto v : wrap_rows(body, text_w)) {
                         note_hits(v);
                         note_span(v);
                         cache.rows.push_back(Line::row({
-                            Span{"\xe2\x94\x83 ", fg_dim(role_brand)},
+                            Span{std::string{ui::mark::rail} + " ", fg_dim(role_brand)},
                             line_row(v, strong ? beat : prose, false)}));
                     }
                 }
@@ -816,14 +817,14 @@ Element tool_output_panel(const Model& m) {
             for (std::size_t i = 0; i < lines.size(); ++i) {
                 std::string num = std::to_string(i + 1);
                 num.insert(0, static_cast<std::size_t>(gutter_w) - num.size(), ' ');
-                const bool cut = lines[i].starts_with("\xe2\x8b\xaf ");   // ⋯ note
+                const bool cut = lines[i].starts_with(std::string{ui::mark::more} + " ");   // ⋯ note
                 bool first = true;
                 for (auto v : wrap_rows(lines[i], text_w)) {
                     note_hits(v);
                     if (v.empty()) note_blank(lines[i].data()); else note_span(v);
                     cache.rows.push_back(Line::row({
                         Span{first ? " " + num + " " : blank_gutter, fg_dim(muted)},
-                        Span{first ? "\xe2\x94\x82 " : "\xe2\x94\x8a ", fg_dim(pipe_hue)},   // │ ┊
+                        Span{first ? std::string{ui::mark::rail_thin} + " " : std::string{ui::mark::rail_dash} + " ", fg_dim(pipe_hue)},   // │ ┊
                         cut ? line_row(v, fg_italic(muted), false)
                             : line_row(v, base, !e.failed)}));
                     first = false;
@@ -848,9 +849,9 @@ Element tool_output_panel(const Model& m) {
         };
         std::string meta;
         if (toks > 0)
-            meta += "  \xc2\xb7  " + tok_label(toks) + (thinking_live ? " tok" : " tokens");
+            meta += ui::mark::gap_sep + tok_label(toks) + (thinking_live ? " tok" : " tokens");
         if (thought_ms > 0) {
-            meta += "  \xc2\xb7  ";
+            meta += ui::mark::gap_sep;
             if (thought_ms >= 60'000)
                 meta += std::format("{}m{:02}s", thought_ms / 60'000, (thought_ms / 1000) % 60);
             else if (thought_ms >= 10'000)
@@ -919,16 +920,16 @@ Element tool_output_panel(const Model& m) {
     auto hint = [](std::string k, std::string l, int p) { return maya::KeyHint{std::move(k), std::move(l), p, fg}; };
     if (o->typing) {
         vc.hints = {hint("Enter", "keep", 5),
-                    hint("\xe2\x86\x91\xe2\x86\x93", "prev/next match", 4),   // ↑↓
+                    hint(ui::mark::updown, "prev/next match", 4),   // ↑↓
                     hint("Esc", "clear", 3)};
     } else {
-        vc.hints = {hint("\xe2\x86\x91\xe2\x86\x93", "scroll", 6),        // ↑↓
+        vc.hints = {hint(ui::mark::updown, "scroll", 6),        // ↑↓
                     hint("PgUp/PgDn", "page", 3),
                     hint("/", "find", 5)};
         if (!o->query.empty()) vc.hints.push_back(hint("n/N", "next/prev", 5));
         if (following_kind || o->following) vc.hints.push_back(hint("End", "follow", 4));
         if (o->entries.size() > 1)
-            vc.hints.push_back(hint("\xe2\x86\x90\xe2\x86\x92",   // ←→
+            vc.hints.push_back(hint(ui::mark::leftright,   // ←→
                                     o->thinking_only ? "older/newer" : "other output", 4));
         if (o->fresh_above > 0) vc.hints.push_back(hint("t", "newest", 6));
         if (!e.is_live) vc.hints.push_back(hint("y", "copy", 4));

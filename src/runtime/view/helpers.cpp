@@ -24,22 +24,29 @@ maya::Color profile_color(Profile p) noexcept {
     // of state rather than a deliberate choice — bright_cyan claims an
     // identity for it without colliding with Write (magenta) or Ask
     // (blue). All three profile chips now carry a real color.
+    using P = maya::look::ink::Profile;
     switch (p) {
-        case Profile::Write:   return role_brand;   // magenta
-        case Profile::Ask:     return role_info;    // blue
-        case Profile::Minimal: return code_path;    // bright_cyan
+        case Profile::Write:   return maya::look::ink::profile(P::Write);
+        case Profile::Ask:     return maya::look::ink::profile(P::Ask);
+        case Profile::Minimal: return maya::look::ink::profile(P::Minimal);
     }
     return fg;
 }
 
-std::string_view phase_glyph(const Phase& p) noexcept {
-    return std::visit([](const auto& v) -> std::string_view {
+// Which look-phase a Phase is; its colour and glyph are maya::look's.
+static maya::look::ink::Phase look_phase(const Phase& p) noexcept {
+    return std::visit([](const auto& v) -> maya::look::ink::Phase {
         using T = std::decay_t<decltype(v)>;
-        if      constexpr (std::same_as<T, phase::Idle>)               return "●";
-        else if constexpr (std::same_as<T, phase::Streaming>)          return "◐";
-        else if constexpr (std::same_as<T, phase::AwaitingPermission>) return "⚠";
-        else                                                           return "▶";
+        using L = maya::look::ink::Phase;
+        if      constexpr (std::same_as<T, phase::Idle>)               return L::Idle;
+        else if constexpr (std::same_as<T, phase::Streaming>)          return L::Streaming;
+        else if constexpr (std::same_as<T, phase::AwaitingPermission>) return L::Awaiting;
+        else                                                           return L::Running;
     }, p);
+}
+
+std::string_view phase_glyph(const Phase& p) noexcept {
+    return maya::look::mark::phase(look_phase(p));
 }
 
 std::string_view phase_verb(const Phase& p) noexcept {
@@ -53,22 +60,7 @@ std::string_view phase_verb(const Phase& p) noexcept {
 }
 
 maya::Color phase_color(const Phase& p) noexcept {
-    return std::visit([](const auto& v) -> maya::Color {
-        using T = std::decay_t<decltype(v)>;
-        // Use bright ANSI variants for active phases so the pulsing
-        // spinner in the status-bar chip reads as "alive" on every
-        // palette, not just high-contrast dark themes.
-        //
-        // These were bright_* literals, chosen because `highlight` and
-        // `success` landed on the desaturated end of several light themes.
-        // The tokens are theme reads now, so the theme itself answers that
-        // — a literal here would be the same bet on someone else's palette
-        // that it always was, just in the other direction.
-        if      constexpr (std::same_as<T, phase::Idle>)               return muted;
-        else if constexpr (std::same_as<T, phase::Streaming>)          return status_info;
-        else if constexpr (std::same_as<T, phase::AwaitingPermission>) return status_warn;
-        else                                                           return status_ok;
-    }, p);
+    return maya::look::ink::phase(look_phase(p));
 }
 
 std::string small_caps(std::string_view s) {

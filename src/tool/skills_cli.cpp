@@ -37,6 +37,7 @@
 
 #include <maya/core/target.hpp>
 #include <maya/widget/agentty/report.hpp>
+#include <maya/widget/agentty/look.hpp>
 #include "agentty/tool/skills.hpp"
 
 #include "agentty/scope/scope.hpp"
@@ -244,8 +245,10 @@ void print_consent(const Skill& s, const std::vector<Finding>& findings) {
     if (!findings.empty()) {
         std::printf("  reading the file, agentty noticed:\n");
         namespace rep = maya::report;
-        const maya::Style crit = maya::Style{}.with_fg(maya::Color::slot(maya::ThemeSlot::Error)).with_bold();
-        const maya::Style warn = maya::Style{}.with_fg(maya::Color::slot(maya::ThemeSlot::Warning)).with_bold();
+        namespace tone = maya::look::tone;
+        namespace ink  = maya::look::ink;
+        const maya::Style crit = tone::strong(ink::status_error);
+        const maya::Style warn = tone::strong(ink::status_warn);
         rep::Table t;
         t.indent = 3;
         for (const auto& f : findings) {

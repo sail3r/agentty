@@ -14,6 +14,7 @@
 
 #include "agentty/runtime/slash.hpp"
 #include "agentty/runtime/view/palette.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -47,7 +48,7 @@ namespace {
         std::size_t cut = cap;
         while (cut > 0 && (static_cast<unsigned char>(s[cut]) & 0xC0) == 0x80) --cut;
         s.resize(cut);
-        s += "\xe2\x80\xa6";   // …
+        s += ui::mark::ellipsis;   // …
     }
     return s;
 }

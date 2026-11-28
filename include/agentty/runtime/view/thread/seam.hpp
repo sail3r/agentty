@@ -29,6 +29,7 @@
 #include "agentty/domain/ui_live.hpp"   // compact_turns: the seam's height
 #include "agentty/foreign/names.hpp"     // import_seam_row's "from Codex"
 #include "agentty/runtime/view/palette.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -80,7 +81,7 @@ inline constexpr int kGapRows = 3;
 // tests (midrun_seam_test) grep for it to count divider copies.
 inline maya::Element compaction_divider_row() {
     return maya::Conversation::section_break({
-        .glyph = "\xe2\x89\xa1",                  // ≡
+        .glyph = ui::mark::summary,                  // ≡
         .label = "Conversation compacted",
         .from  = {},
         .cache_tag = {"agentty.compaction.divider.v2"},
@@ -107,7 +108,7 @@ inline bool compaction_boundary_at(
 inline maya::Element import_seam_row(std::string source_name) {
     // The tag view must outlive the call: section_break hashes it up front.
     return maya::Conversation::section_break({
-        .glyph = "\xe2\x86\x92",                  // →
+        .glyph = ui::mark::arrow,                  // →
         .label = "continued in agentty",
         .from  = "from " + source_name,
         .cache_tag = {"agentty.import.seam.v1", source_name},

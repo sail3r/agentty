@@ -21,6 +21,7 @@
 #include <string_view>
 
 #include "agentty/runtime/view/palette.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui::detail {
 
@@ -64,7 +65,7 @@ std::string clean_report_line(std::string_view ln) {
     while (body.starts_with(' ') && indent == 0 && !ln.empty() && ln[0] == '#') body.remove_prefix(1);
     std::string out(indent, ' ');
     if (body.starts_with("- ") || body.starts_with("* ")) {
-        out += "\xe2\x80\xa2 ";   // •
+        out += std::string{ui::mark::bullet} + " ";   // •
         body.remove_prefix(2);
     }
     // Table row "| a | b |" -> "a · b"; separator rows vanish.
@@ -77,7 +78,7 @@ std::string clean_report_line(std::string_view ln) {
             std::string_view cell = body.substr(i, (j == std::string_view::npos ? body.size() : j) - i);
             while (!cell.empty() && cell.front() == ' ') cell.remove_prefix(1);
             while (!cell.empty() && cell.back() == ' ') cell.remove_suffix(1);
-            if (!cell.empty()) { if (!row.empty()) row += " \xc2\xb7 "; row += cell; }
+            if (!cell.empty()) { if (!row.empty()) row += ui::mark::sep; row += cell; }
             if (j == std::string_view::npos) break;
             i = j + 1;
         }
@@ -131,12 +132,12 @@ std::string status_row(std::string_view first) {
     if (max > 0) {
         constexpr int kCells = 10;
         const int filled = std::clamp((turn * kCells + max - 1) / max, 1, kCells);
-        for (int k = 0; k < kCells; ++k) bar += k < filled ? "\xe2\x96\xb0" : "\xe2\x96\xb1";
+        for (int k = 0; k < kCells; ++k) bar += k < filled ? ui::mark::gauge_on : ui::mark::gauge_off;
         bar += "  ";
     }
     // The last " · " field is the clock when it looks like one ("1m 12s",
     // "8s"): move it to the front.
-    constexpr std::string_view kSep = " \xc2\xb7 ";
+    constexpr std::string_view kSep = ui::mark::sep;
     if (const auto cut = rest.rfind(kSep); cut != std::string_view::npos) {
         const std::string_view clock = rest.substr(cut + kSep.size());
         const bool is_clock = !clock.empty() && clock.back() == 's'
@@ -164,7 +165,7 @@ bool task_body(const ToolUse& tc, maya::ToolBodyPreview::Config& out) {
         // card header, which must stay byte-stable once it has scrolled
         // into native scrollback.
         std::string status;
-        if (feed.starts_with("\xe2\x97\x86 ")) {
+        if (feed.starts_with(std::string{ui::mark::diamond} + " ")) {
             const auto nl = feed.find('\n');
             status = status_row(feed.substr(0, nl));
             feed = nl == std::string_view::npos ? std::string_view{} : feed.substr(nl + 1);
@@ -190,7 +191,7 @@ bool task_body(const ToolUse& tc, maya::ToolBodyPreview::Config& out) {
             const std::size_t beg = nl == std::string_view::npos ? 0 : nl + 1;
             std::string ln = clean_report_line(said.substr(beg, end - beg));
             if (ln != kDropLine && ln.find_first_not_of(' ') != std::string::npos)
-                said_rows.insert(said_rows.begin(), "  \xe2\x96\xb8 " + ln);   // ▸
+                said_rows.insert(said_rows.begin(), std::string{"  "} + ui::mark::cursor + " " + ln);   // ▸
             if (nl == std::string_view::npos) break;
             end = nl;
         }

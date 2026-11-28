@@ -9,6 +9,7 @@
 #include "agentty/provider/registry.hpp"
 #include "agentty/provider/selection.hpp"
 #include "agentty/runtime/view/palette.hpp"   // fg_dim / muted palette
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -88,9 +89,9 @@ maya::Element model_badge_config(const Model& m, std::string trailing) {
     // PROVIDER (who serves the bytes), not the model.
     if (const auto* pa = m.d.auth.find(active_sel.catalog_id());
         pa && pa->accounts.size() > 1 && !pa->active_account.empty())
-        prov += " \xc2\xb7 " + pa->active_account;
+        prov += ui::mark::sep + pa->active_account;
     chip.provider       = prov;
-    chip.provider_style = ui::chip_style(name.color).with_bold();
+    chip.provider_style = ui::tone::badge(name.color);
 
     // First-run honesty. If the user escaped out of the login modal (or
     // launched for the first time with no env-var credentials), the active
@@ -119,7 +120,7 @@ maya::Element model_badge_config(const Model& m, std::string trailing) {
         // the next `login` paste would route to; it's rendered with the
         // muted hue, same as every other "disabled, actionable" chip.
         chip.state          = Chip::State::SignedOut;
-        chip.provider_style = ui::chip_style(muted).with_bold();
+        chip.provider_style = ui::tone::badge(muted);
         chip.note           = "\xe2\x80\x94 sign in";
         return Chip{std::move(chip)}.build();
     }
@@ -188,10 +189,10 @@ maya::Element model_badge_config(const Model& m, std::string trailing) {
     // one, so "updated" is only half true; the restart is the outstanding
     // step and it needs a marker that outlives the status line.
     if (!m.s.update_pending_restart.empty()) {
-        chip.update       = "\xe2\x86\xba v" + m.s.update_pending_restart;
+        chip.update       = std::string{ui::mark::restore} + " v" + m.s.update_pending_restart;
         chip.update_color = ui::status_warn;
     } else if (!m.s.update_latest.empty()) {
-        chip.update       = "\xe2\xac\x86 v" + m.s.update_latest;
+        chip.update       = std::string{ui::mark::upgrade} + " v" + m.s.update_latest;
         chip.update_color = ui::status_ok;
     }
 

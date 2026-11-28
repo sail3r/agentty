@@ -40,6 +40,7 @@
 #include "agentty/runtime/view/palette.hpp"
 #include "agentty/runtime/view/thread/turn/permission.hpp"
 #include "agentty/runtime/view/thread/seam.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -1517,7 +1518,7 @@ SpeakerStyle speaker_style_for(Role role, const Model& m, const Message* msg) {
         // User rail is `role_brand` (magenta) — distinct from code-reference
         // cyan and matching the composer's accent color when has-text, so
         // the user's typed message visually flows into their turn header.
-        return {role_brand, "\xe2\x9d\xaf", "You"};                  // ❯
+        return {role_brand, ui::mark::caret, "You"};                  // ❯
     }
     // Prefer the turn's own provenance; fall back to the live selection for
     // turns that predate the field (or ran with Smart Mode off).
@@ -1542,7 +1543,7 @@ SpeakerStyle speaker_style_for(Role role, const Model& m, const Message* msg) {
     // status hues. `medium()` — "Opus 4.8" — is the turn-header projection;
     // the `· 1M` annotation is the picker's business.
     const auto name = model_name::decode(id);
-    SpeakerStyle out{name.color, "\xe2\x9c\xa6", name.medium()};     // ✦
+    SpeakerStyle out{name.color, ui::mark::sparkle, name.medium()};     // ✦
     if (msg)
         if (msg->served_role) {
             auto ra = role_accent_for(*msg->served_role);
@@ -1605,7 +1606,7 @@ std::string format_turn_meta(const Message& msg, int turn_num,
     // conditional on something already being there — otherwise Off leaves a
     // leading "\xc2\xb7" hanging where the clock used to be.
     const auto join = [&meta](std::string part) {
-        if (!meta.empty()) meta += "  \xc2\xb7  ";
+        if (!meta.empty()) meta += ui::mark::gap_sep;
         meta += std::move(part);
     };
     // Only surface elapsed when it's meaningful. A near-instant local-model
@@ -1616,7 +1617,7 @@ std::string format_turn_meta(const Message& msg, int turn_num,
     if (turn_num > 0)
         join("turn " + std::to_string(turn_num));
     if (checkpoint)
-        join("\xe2\x86\xba checkpoint");   // ↺ checkpoint
+        join(std::string{ui::mark::restore} + " checkpoint");   // ↺ checkpoint
     return meta;
 }
 
@@ -1848,47 +1849,8 @@ std::optional<maya::Element> reasoning_slot(const Message& msg, const Model& m) 
     rcfg.accent      = ui::role_brand;          // ┃ rail + sigil
     rcfg.header_word = ui::text_secondary;      // visible header/meter
     rcfg.body_fg     = ui::text_secondary;      // always-visible dim
-    // `secondary` is a HUE in most schemes (green in Srcery), so reasoning
-    // read like success output. When the theme states real colours, use its
-    // own text ink pulled back toward the canvas, with a touch of the rail
-    // hue: neutral, clearly quieter than the answer, still >= 4.5:1.
-    {
-        const maya::Theme& th = maya::theme::live();
-        const auto tx = th.resolve(maya::Color::slot(maya::ThemeSlot::Text));
-        const auto bg = th.resolve(maya::Color::slot(maya::ThemeSlot::Background));
-        const auto ac = th.resolve(ui::role_brand);
-        if (tx.has_channels() && bg.has_channels() && ac.has_channels()) {
-            auto lum = [](int r, int g, int b) {
-                auto f = [](int v) {
-                    const double s = v / 255.0;
-                    return s <= 0.03928 ? s / 12.92
-                                        : std::pow((s + 0.055) / 1.055, 2.4);
-                };
-                return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-            };
-            const double lb = lum(bg.r(), bg.g(), bg.b());
-            auto mix = [&](double t) {
-                auto ch = [&](int a, int b, int c) {
-                    const double v = a + (b - a) * t;          // toward bg
-                    return static_cast<uint8_t>(v + (c - v) * 0.12 + 0.5);  // tint
-                };
-                return maya::Color::rgb(ch(tx.r(), bg.r(), ac.r()),
-                                        ch(tx.g(), bg.g(), ac.g()),
-                                        ch(tx.b(), bg.b(), ac.b()));
-            };
-            // Pull back as far as 40%, but never below 4.5:1 on the canvas.
-            for (double t = 0.40; t >= 0.0; t -= 0.05) {
-                const auto c = maya::theme::live().resolve(mix(t));
-                const double lc = lum(c.r(), c.g(), c.b());
-                const double cr = lc > lb ? (lc + 0.05) / (lb + 0.05)
-                                          : (lb + 0.05) / (lc + 0.05);
-                if (cr >= 4.5 || t <= 0.0) {
-                    rcfg.body_fg = rcfg.header_word = mix(t);
-                    break;
-                }
-            }
-        }
-    }
+    // Quieter than the answer and never a status hue; maya::look decides how.
+    rcfg.body_fg = rcfg.header_word = maya::look::ink::reasoning();
     // Thinking::Collapsed — a glance, and that is the whole pref: the last
     // 8 ROWS of the reasoning, whether it is still arriving or long done.
     // Thinking::Shown is the one that renders all of it.
@@ -2005,7 +1967,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
     // Smart Mode role tag, leading the meta strip so the delegation trace
     // reads down the right-hand gutter: "strategist · 12:34 · 4.2s · turn 3".
     if (!style.role_label.empty())
-        cfg.meta = style.role_label + "  \xc2\xb7  " + cfg.meta;
+        cfg.meta = style.role_label + ui::mark::gap_sep + cfg.meta;
 
     // Compact-boundary turn: rendered as a real, minimal SYSTEM turn
     // rather than a bare full-width divider (which read as chrome / a
@@ -2023,7 +1985,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
     // lands). CC does the same — its `compact_boundary` transcript line
     // renders as a marker, not the summary body.
     if (msg.is_compact_summary) {
-        cfg.glyph      = "\xe2\x89\xa1";              // ≡
+        cfg.glyph      = ui::mark::summary;              // ≡
         cfg.label      = "Compacted";
         cfg.rail_color = muted;
         cfg.meta       = timestamp_hh_mm(msg.timestamp);
@@ -2043,7 +2005,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
     // parent transcript is readable on demand. The model still receives
     // msg.text in full on the wire (it's a real User message, not elided).
     if (msg.fork_note) {
-        cfg.glyph      = "\xe2\x91\x83";              // ⑃
+        cfg.glyph      = ui::mark::forked;              // ⑃
         cfg.label      = "Forked";
         cfg.rail_color = status_info;
         cfg.meta       = timestamp_hh_mm(msg.timestamp);
@@ -2067,7 +2029,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
     // marks it as an orchestration event, not a real turn. The actual
     // subagent delegations render as ordinary `task` tool cards.
     if (msg.smart_routing) {
-        cfg.glyph      = "\xf0\x9f\xa7\xa0";          // 🧠
+        cfg.glyph      = ui::mark::brain;          // 🧠
         cfg.label      = "Smart Mode";
         cfg.rail_color = accent;                       // purple/accent axis
         cfg.meta       = timestamp_hh_mm(msg.timestamp);
@@ -2171,7 +2133,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
                 constexpr std::size_t kFullCap = 800;
                 if (full.size() > kFullCap) {
                     full.resize(kFullCap);
-                    full += "\xe2\x80\xa6";                 // …
+                    full += ui::mark::ellipsis;                 // …
                 }
 
                 std::size_t eol = msg.text.find('\n', body);
@@ -2212,7 +2174,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
                     constexpr std::size_t kSnipCap = 512;
                     if (line.size() > kSnipCap) {
                         line.resize(kSnipCap);
-                        line += "\xe2\x80\xa6";             // …
+                        line += ui::mark::ellipsis;             // …
                     }
                     snippet = std::move(line);
                 }
@@ -2232,7 +2194,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
             }
         }
 
-        cfg.glyph      = "\xf0\x9f\x93\x9a";          // 📚
+        cfg.glyph      = ui::mark::books;          // 📚
         cfg.label      = "Retrieved context";
         // Blue rail: this is a CONTEXT / reference turn (status_info axis),
         // which also lifts the whole card out of the flat muted gray.
@@ -2301,21 +2263,21 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
                     // at the current terminal width rather than pushing the
                     // retrieval card (and following turns) onto extra rows.
                     std::string quoted = s.full.empty() ? std::string{}
-                        : " \xe2\x80\x9c" + s.full + "\xe2\x80\x9d";
+                        : std::string{" "} + ui::mark::lquote + s.full + ui::mark::rquote;
                     rows.push_back(source_row(quoted));
                 } else if (!s.snippet.empty()) {
                     // Keep quotation marks in the same truncating node: no
                     // dangling close quote and, critically, no second line.
                     rows.push_back(source_row(
-                        "\xe2\x80\x9c" + s.snippet + "\xe2\x80\x9d"));
+                        ui::mark::lquote + s.snippet + ui::mark::rquote));
                 } else {
                     rows.push_back(source_row({}));
                 }
             }
             if (total > kMaxSources) {
-                rows.push_back(maya::Line::clipped("  \xe2\x80\xa6 " + std::to_string(total - kMaxSources)
+                rows.push_back(maya::Line::clipped(std::string{"  "} + ui::mark::ellipsis + " " + std::to_string(total - kMaxSources)
                              + " more source"
-                             + (total - kMaxSources == 1 ? "" : "s"), {}, maya::Style{}.with_fg(muted)));
+                             + (total - kMaxSources == 1 ? "" : "s"), {}, fg_of(muted)));
             }
             if (!rows.empty()) {
                 cfg.body.emplace_back(maya::Turn::BodySlot{
@@ -2333,7 +2295,7 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
                     ? "  ^U collapse"
                     : "  ^U expand full passages";
                 cfg.body.emplace_back(maya::Turn::BodySlot{
-                    maya::Line::clipped(affordance, {}, maya::Style{}.with_fg(status_info)).build()});
+                    maya::Line::clipped(affordance, {}, fg_of(status_info)).build()});
             }
         }
         return cfg;
@@ -2407,7 +2369,7 @@ maya::Turn::Config turn_config_for_assistant_run(
                               : std::nullopt,
                           m.wall_at(maya::anim_now()));
     if (!style.role_label.empty())
-        cfg.meta = style.role_label + "  \xc2\xb7  " + cfg.meta;
+        cfg.meta = style.role_label + ui::mark::gap_sep + cfg.meta;
 
     if (head.role != Role::Assistant) {
         // Defensive: only Assistant runs use the multi-message path.

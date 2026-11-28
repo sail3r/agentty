@@ -4,6 +4,7 @@
 // owns every chrome decision. Shared scaffolding: panels_prologue.hpp.
 
 #include "panels_prologue.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -49,7 +50,7 @@ Element providers_panel(const Model& m) {
         -> std::pair<std::string, maya::Color> {
         auto signed_badge = [&](std::string signed_label) {
             return std::pair<std::string, maya::Color>{
-                active ? std::string{"\xe2\x9c\x93 signed in \xc2\xb7 accounts"}
+                active ? std::string{std::string{ui::mark::ok} + " signed in" + ui::mark::sep + "accounts"}
                        : std::move(signed_label),
                 active ? success : muted};
         };
@@ -61,34 +62,34 @@ Element providers_panel(const Model& m) {
         if (p.token_in_transport) {
             if (provider::signed_in(p.id, m.d.persisted, m.d.auth))
                 return signed_badge(std::string{p.label} + " (signed in)");
-            return {"\xe2\x9a\xa0 sign in with " + std::string{p.label}, warn};
+            return {std::string{ui::mark::warn} + " sign in with " + std::string{p.label}, warn};
         }
         if (p.is_local || p.auth == provider::AuthStyle::None)
-            return {"\xe2\x97\x8f local", info};
+            return {std::string{ui::mark::on} + " local", info};
         if (p.kind() == provider::Kind::Anthropic) {
             // The credential store, not the live header (do NOT read
             // deps().auth here), as loaded into the Model's AuthView.
             if (m.d.auth.stored(p.id))
-                return {active ? "\xe2\x9c\x93 signed in \xc2\xb7 accounts" : "\xe2\x9c\x93 signed in", success};
-            return {"\xe2\x9a\xa0 sign in", warn};
+                return {active ? std::string{ui::mark::ok} + " signed in" + ui::mark::sep + "accounts" : std::string{ui::mark::ok} + " signed in", success};
+            return {std::string{ui::mark::warn} + " sign in", warn};
         }
         // Hosted API-key provider: distinguish a SAVED (pasted) key — which
         // ^D signs out — from an ENV key, which can't be removed in-app, so
         // the badge must not imply ^D will work on it.
         switch (provider::auth_source(p, settings, m.d.auth)) {
             case provider::AuthSource::Saved:
-                return {active ? "\xe2\x9c\x93 signed in \xc2\xb7 key"
-                               : "\xe2\x9c\x93 key saved", success};
+                return {active ? std::string{ui::mark::ok} + " signed in" + ui::mark::sep + "key"
+                               : std::string{ui::mark::ok} + " key saved", success};
             case provider::AuthSource::Env: {
-                return {"\xe2\x97\x8f key from " + m.d.auth.env_var(p.id), info};
+                return {std::string{ui::mark::on} + " key from " + m.d.auth.env_var(p.id), info};
             }
             case provider::AuthSource::Local:
-                return {"\xe2\x97\x8f local", info};
+                return {std::string{ui::mark::on} + " local", info};
             case provider::AuthSource::None:
             default: break;
         }
         std::string_view want = p.auth_env.front();
-        return {want.empty() ? "\xe2\x9a\xa0 no key" : "\xe2\x9a\xa0 " + std::string{want}, warn};
+        return {want.empty() ? std::string{ui::mark::warn} + " no key" : std::string{ui::mark::warn} + " " + std::string{want}, warn};
     };
 
     cfg.items.reserve(srows.size() + 3);
@@ -102,12 +103,12 @@ Element providers_panel(const Model& m) {
         if (auto it = settings.session_headers.find(host_key(ep.host, ep.port));
             it != settings.session_headers.end() && !it->second.empty()) {
             if (it->second.front() == '=')
-                return "  \xc2\xb7  " + it->second.substr(1) + " (pinned)";
-            return "  \xc2\xb7  " + it->second + " (learned)";
+                return ui::mark::gap_sep + it->second.substr(1) + " (pinned)";
+            return ui::mark::gap_sep + it->second + " (learned)";
         }
         if (const auto* row = provider::preset_for(provider_id);
             row && !row->session_header.empty())
-            return "  \xc2\xb7  " + std::string{row->session_header};
+            return ui::mark::gap_sep + std::string{row->session_header};
         return {};
     };
     std::optional<ui::ProviderSection> cur_section;
@@ -189,7 +190,7 @@ Element providers_panel(const Model& m) {
             // An action, not a destination: a dim › marker in the badge
             // column distinguishes it from the provider rows above without
             // borrowing the ● that means "active".
-            row.badge       = "\xe2\x80\xba";          // ›
+            row.badge       = ui::mark::chevron;          // ›
             row.badge_style = fg_dim(muted);
             row.leading = "Show " + std::to_string(sectioned.n_hidden)
                         + " more providers";
@@ -213,7 +214,7 @@ Element providers_panel(const Model& m) {
             // A SPACE when inactive, not an empty string: maya only reserves
             // the badge cell for rows that set one, so leaving it empty
             // pulled every other row a glyph left and undid the alignment.
-            row.badge       = active ? "\xe2\x97\x8f" : " ";   // ●
+            row.badge       = active ? ui::mark::on : " ";   // ●
             row.badge_style = fg_of(accent);
             row.leading = pad_name(std::string{p->label})
                         + std::string{p->blurb};
@@ -231,7 +232,7 @@ Element providers_panel(const Model& m) {
             if (confirming) {
                 // Del/d armed on a preset that has a saved key — second press
                 // signs out (clears the key), the preset itself stays.
-                row.trailing       = "\xe2\x9c\x97 press again to sign out";
+                row.trailing       = std::string{ui::mark::fail} + " press again to sign out";
                 row.trailing_style = fg_of(warn);
             } else if (sr.offer) {
                 row.trailing       = "Enter to set up";
@@ -254,7 +255,7 @@ Element providers_panel(const Model& m) {
             row.active         = false;
         } else if (const auto* agent = r.acp()) {
             const bool active = (agent->id == active_id);
-            row.badge       = active ? "\xe2\x97\x8f" : " ";   // ●
+            row.badge       = active ? ui::mark::on : " ";   // ●
             row.badge_style = fg_of(accent);
             row.leading        = pad_name(agent->id)
                                + "external ACP agent (" + agent->command + ")";
@@ -265,12 +266,12 @@ Element providers_panel(const Model& m) {
         } else if (const auto* spec = r.custom_host()) {
             const bool active = (*spec == active_id);
             const bool confirming = (picker->confirm_remove == *spec);
-            row.badge       = active ? "\xe2\x97\x8f" : " ";   // ●
+            row.badge       = active ? ui::mark::on : " ";   // ●
             row.badge_style = fg_of(accent);
             row.leading        = pad_name(*spec) + "custom OpenAI-compatible host";
             row.leading_style  = active ? fg_bold(fg) : fg_of(fg);
             if (confirming) {
-                row.trailing       = "\xe2\x9c\x97 press again to remove";
+                row.trailing       = std::string{ui::mark::fail} + " press again to remove";
                 row.trailing_style = fg_of(warn);
             } else {
                 // What the host last told us, not a blanket "ready": a key
@@ -282,13 +283,13 @@ Element providers_panel(const Model& m) {
                 const bool auth_err = err.find("HTTP 401") != std::string::npos
                                    || err.find("HTTP 403") != std::string::npos;
                 if (auth_err) {
-                    row.trailing       = "\xe2\x9a\xa0 key rejected \xc2\xb7 Enter to fix";
+                    row.trailing       = std::string{ui::mark::warn} + " key rejected" + ui::mark::sep + "Enter to fix";
                     row.trailing_style = fg_of(warn);
                 } else if (!err.empty()) {
-                    row.trailing       = "\xe2\x9a\xa0 couldn't list models";
+                    row.trailing       = std::string{ui::mark::warn} + " couldn't list models";
                     row.trailing_style = fg_of(warn);
                 } else {
-                    row.trailing       = "\xe2\x9c\x93 ready";
+                    row.trailing       = std::string{ui::mark::ok} + " ready";
                     row.trailing_style = fg_of(success);
                 }
                 if (active) row.trailing += session_note(*spec);
@@ -305,7 +306,7 @@ Element providers_panel(const Model& m) {
             row.badge_style    = fg_of(success);
             row.leading        = "Use " + *prefill + "  as a custom OpenAI-compatible host";
             row.leading_style  = fg_of(fg);
-            row.trailing       = "\xe2\x8f\x8e connect";
+            row.trailing       = std::string{ui::mark::enter_alt} + " connect";
             row.trailing_style = fg_of(info);
         } else {   // NewCustomHost sentinel, unpromoted
             // `+` marks the one row that CREATES a provider rather than
@@ -315,7 +316,7 @@ Element providers_panel(const Model& m) {
             row.leading        = pad_name("Custom host\xe2\x80\xa6")
                                + "any OpenAI-compatible server (host:port)";
             row.leading_style  = fg_of(fg);
-            row.trailing       = "\xe2\x9c\x8e edit";
+            row.trailing       = std::string{ui::mark::edit} + " edit";
             row.trailing_style = fg_dim(info);
         }
         // Under width pressure the STATUS chip gives way, not the provider
@@ -365,21 +366,21 @@ Element providers_panel(const Model& m) {
     const bool no_presets  = !picker->query.empty()
                            && provider::filter_provider_indices(picker->query).empty();
     if (host_shaped) {
-        cfg.footer.push_back(maya::Line{{"\xe2\x8f\x8e", fg_of(info)}, {" connects to ", fg_dim(muted)}, {picker->query, fg_of(fg)}, {" \xc2\xb7 agentty probes it and adopts the dialect it finds", fg_dim(muted)}});
+        cfg.footer.push_back(maya::Line{{ui::mark::enter_alt, fg_of(info)}, {" connects to ", fg_dim(muted)}, {picker->query, fg_of(fg)}, {" \xc2\xb7 agentty probes it and adopts the dialect it finds", fg_dim(muted)}});
     } else if (no_presets) {
-        cfg.footer.push_back(maya::Line{{"no built-in provider matches ", fg_dim(muted)}, {"\xe2\x80\x9c" + picker->query + "\xe2\x80\x9d", fg_of(fg)}, {" \xc2\xb7 type a ", fg_dim(muted)}, {"host:port", fg_of(info)}, {" to use any OpenAI-compatible server", fg_dim(muted)}});
+        cfg.footer.push_back(maya::Line{{"no built-in provider matches ", fg_dim(muted)}, {ui::mark::lquote + picker->query + ui::mark::rquote, fg_of(fg)}, {" \xc2\xb7 type a ", fg_dim(muted)}, {"host:port", fg_of(info)}, {" to use any OpenAI-compatible server", fg_dim(muted)}});
     } else {
         // The legend explains the badges that are ACTUALLY on screen. In the
         // browse view every row is usable, so there is nothing to explain;
         // expanded, the unconfigured rows say "Enter to set up" rather than
         // naming an env var, so the legend must say the same thing.
         if (any_unconfigured)
-            cfg.footer.push_back(maya::Line{{"\xe2\x9c\x93", fg_of(success)}, {" ready  ", fg_dim(muted)}, {"\xc2\xb7", fg_dim(muted)}, {"  Enter on a dim row adds it", fg_dim(muted)}});
+            cfg.footer.push_back(maya::Line{{ui::mark::ok, fg_of(success)}, {" ready  ", fg_dim(muted)}, {ui::mark::dot, fg_dim(muted)}, {"  Enter on a dim row adds it", fg_dim(muted)}});
         else
-            cfg.footer.push_back(maya::Line{{"\xe2\x9c\x93", fg_of(success)}, {" ready  ", fg_dim(muted)}});
+            cfg.footer.push_back(maya::Line{{ui::mark::ok, fg_of(success)}, {" ready  ", fg_dim(muted)}});
     }
     std::vector<Hint> hints{
-        {"\xe2\x86\x91\xe2\x86\x93", "move", 5},        // ↑↓
+        {ui::mark::updown, "move", 5},        // ↑↓
         {"type", host_shaped ? "endpoint" : "filter", 4},
         {"Enter", host_shaped ? "connect"
                               : (row_has_accounts ? "accounts" : "switch"), 5},

@@ -41,6 +41,7 @@
 #include "agentty/runtime/view/thread/turn/permission.hpp"
 #include "agentty/runtime/view/thread/turn/question.hpp"
 #include "agentty/runtime/view/thread/turn/turn.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -376,7 +377,7 @@ void build_queued_previews(const Model& m, int& running_turn,
         if (qi == 0 && m.s.active())
             meta += " \xc2\xb7 sends when this turn ends";
         if (m.ui.composer.queue_peek_index() == static_cast<int>(qi))
-            meta = "\xe2\x9c\x8e editing \xe2\x80\x94 " + meta;   // ✎
+            meta = std::string{ui::mark::edit} + " editing " + ui::mark::dash + " " + meta;   // ✎
         out.push_back(gap_row());
         auto cfg = turn_config(synthetic, base_idx + qi, running_turn, m,
                                /*continuation=*/false,

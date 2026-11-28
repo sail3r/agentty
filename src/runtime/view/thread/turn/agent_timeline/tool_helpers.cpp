@@ -12,6 +12,7 @@
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_args.hpp"
 #include "agentty/tool/util/utf8.hpp"
 #include "agentty/domain/ui_live.hpp"   // path_roots, project agents
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -77,7 +78,7 @@ std::string tool_display_name(const std::string& n) {
         const auto rest = n.substr(5);
         const auto sep  = rest.find("__");
         if (sep != std::string::npos && sep + 2 < rest.size())
-            return tool_display_name(rest.substr(sep + 2)) + " \xc2\xb7 "
+            return tool_display_name(rest.substr(sep + 2)) + ui::mark::sep
                  + rest.substr(0, sep);
     }
     // Fallback for any UNMAPPED tool name (MCP-provided tools, a raw name the
@@ -122,18 +123,25 @@ std::string tool_display_name(const std::string& n) {
 //   mutate  (edit/write)                          → role_brand (magenta)
 //   vcs     (git_*)                               → role_info (blue, "context-shift")
 //   plan    (todo)                                → status_warn (yellow, planning)
-maya::Color tool_category_color(const std::string& n) {
+// The hue for each category is maya::look::ink::tool's decision; this only
+// says which category a tool is in.
+maya::look::ink::ToolCat tool_category(const std::string& n) {
+    using C = maya::look::ink::ToolCat;
     if (n == "edit" || n == "write" || n == "move" || n == "remove"
         || n == "apply_patch" || n == "replace" || n == "rewrite_structural")
-        return role_brand;
+        return C::Mutate;
     if (n == "bash" || n == "shell" || n == "diagnostics" || n == "test"
         || n.rfind("process_", 0) == 0)
-        return code_text;
-    if (n == "todo")                  return status_warn;
-    if (n == "question")              return role_info;
-    if (n == "task")                  return role_brand_alt;   // agent identity
-    if (n.rfind("git_", 0) == 0)      return role_info;
-    return code_path;
+        return C::Execute;
+    if (n == "todo")                  return C::Plan;
+    if (n == "question")              return C::Ask;
+    if (n == "task")                  return C::Agent;
+    if (n.rfind("git_", 0) == 0)      return C::Vcs;
+    return C::Inspect;
+}
+
+maya::Color tool_category_color(const std::string& n) {
+    return maya::look::ink::tool(tool_category(n));
 }
 
 std::string_view tool_category_label(const std::string& n) {
@@ -305,7 +313,7 @@ static std::string tool_failure_reason(const ToolUse& tc) {
             return "out of turns \xc2\xb7 partial";
         if (auto p = out.find("[subagent failed: "); p != std::string_view::npos) {
             std::string why{out.substr(p + 18, out.find(']', p) - p - 18)};
-            if (why.size() > 40) why = why.substr(0, 39) + "\xe2\x80\xa6";
+            if (why.size() > 40) why = why.substr(0, 39) + ui::mark::ellipsis;
             return why;
         }
         if (out.find("[subagent stopped") != std::string_view::npos) return "stopped";
@@ -342,7 +350,7 @@ static std::string tool_failure_reason(const ToolUse& tc) {
      || out.starts_with("tool args truncated"))
         return "args cut off";
     std::string first{out.substr(0, out.find('\n'))};
-    if (first.size() > 48) first = first.substr(0, 47) + "\xe2\x80\xa6";
+    if (first.size() > 48) first = first.substr(0, 47) + ui::mark::ellipsis;
     return first;
 }
 
@@ -365,11 +373,11 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
     const auto path_pp = pretty_path(path);
 
     if (n == "read") {
-        auto detail = path_pp.empty() ? std::string{"\xe2\x80\xa6"} : path_pp;
+        auto detail = path_pp.empty() ? std::string{ui::mark::ellipsis} : path_pp;
         // Symbol reads are the encouraged idiom — say WHAT was read, not
         // just where. Streaming-live like every other arg via safe().
         if (auto sym = safe("symbol"); !sym.empty())
-            detail += " \xc2\xb7 " + sym + "()";
+            detail += ui::mark::sep + sym + "()";
         // Both spellings of the range start (offset / Zed-style start_line).
         int off = safe_int_arg(tc.args, "offset", 0);
         if (off == 0) off = safe_int_arg(tc.args, "start_line", 0);
@@ -378,7 +386,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
             // footer: a 5-line read of a 349-line file reads "131–135 of
             // 349", not "349 lines", which looked like the card's own size.
             if (auto r = parse_read_shown_range(card_output(tc)); r.first > 0) {
-                detail += "  \xc2\xb7  " + std::to_string(r.first) + "\xe2\x80\x93"
+                detail += ui::mark::gap_sep + std::to_string(r.first) + ui::mark::range
                         + std::to_string(r.second);
                 if (r.total > 0) detail += " of " + std::to_string(r.total);
                 return detail;
@@ -389,7 +397,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
             // output when there's no such marker (small file read whole).
             int lines = parse_read_total_lines(card_output(tc));
             if (lines < 0) lines = count_lines(card_output(tc));
-            if (lines > 1) detail += "  \xc2\xb7  " + std::to_string(lines) + " lines";
+            if (lines > 1) detail += ui::mark::gap_sep + std::to_string(lines) + " lines";
         } else if (off > 0) {
             detail += ":" + std::to_string(off);
         }
@@ -403,10 +411,10 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
         // show_all is a net GROW at that frame → gate → HardReset). The
         // lines/bytes stats render in the settled body footer
         // (show_footer_stats), which paints below the seam.
-        return path_pp.empty() ? std::string{"\xe2\x80\xa6"} : path_pp;
+        return path_pp.empty() ? std::string{ui::mark::ellipsis} : path_pp;
     }
     if (n == "edit") {
-        if (path_pp.empty()) return "\xe2\x80\xa6";
+        if (path_pp.empty()) return ui::mark::ellipsis;
         // Header detail is LIFECYCLE-STABLE: just the path, forever. No
         // "· N edits" count and no "(…)" output echo — both appear only
         // at terminal, but this detail renders on the event HEADER row,
@@ -436,7 +444,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
                 count = asked.empty() ? 0 : 1;
             }
         }
-        if (asked.empty()) asked = "\xe2\x80\xa6";
+        if (asked.empty()) asked = ui::mark::ellipsis;
         if (tc.is_done()) {
             const auto& out = card_output(tc);
             if (out.starts_with("The user pressed Esc")) return asked + "  \xc2\xb7  stopped";
@@ -451,11 +459,11 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
         // safe() is streaming-aware, so source/destination show live too.
         auto src = pretty_path(safe("source"));
         auto dst = pretty_path(safe("destination"));
-        if (src.empty() && dst.empty()) return "\xe2\x80\xa6";
-        return src + "  \xe2\x86\x92  " + dst;
+        if (src.empty() && dst.empty()) return ui::mark::ellipsis;
+        return src + std::string{"  "} + ui::mark::arrow + "  " + dst;
     }
     if (n == "remove") {
-        auto detail = path_pp.empty() ? std::string{"\xe2\x80\xa6"} : path_pp;
+        auto detail = path_pp.empty() ? std::string{ui::mark::ellipsis} : path_pp;
         if (safe_bool_arg(tc.args, "recursive"))
             detail += "  \xc2\xb7  recursive";
         return detail;
@@ -465,11 +473,11 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
         if (cmd.empty()) {
             // args never arrived (cancelled / cut off): say what it was for.
             auto why = safe("display_description");
-            return why.empty() ? std::string{"\xe2\x80\xa6"} : why;
+            return why.empty() ? std::string{ui::mark::ellipsis} : why;
         }
         // show the real command, not display_description.
         if (auto nl = cmd.find('\n'); nl != std::string::npos)
-            cmd = cmd.substr(0, nl) + " \xe2\x80\xa6";
+            cmd = cmd.substr(0, nl) + std::string{" "} + ui::mark::ellipsis;
         if (tc.is_done()) {
             int rc = parse_exit_code(card_output(tc));
             if (rc != 0) cmd += "  \xc2\xb7  exit " + std::to_string(rc);
@@ -478,15 +486,15 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
     }
     if (n == "process_start") {
         auto cmd = safe("command");
-        if (cmd.empty()) return "\xe2\x80\xa6";
+        if (cmd.empty()) return ui::mark::ellipsis;
         if (auto nl = cmd.find('\n'); nl != std::string::npos)
-            cmd = cmd.substr(0, nl) + " \xe2\x80\xa6";
+            cmd = cmd.substr(0, nl) + std::string{" "} + ui::mark::ellipsis;
         return cmd;
     }
     if (n == "process_poll" || n == "process_stop") {
         auto id = safe("id");
         if (id.empty()) id = safe("session_id");
-        return id.empty() ? std::string{"\xe2\x80\xa6"} : "session " + id;
+        return id.empty() ? std::string{ui::mark::ellipsis} : "session " + id;
     }
     if (n == "test") {
         auto detail = safe("command");
@@ -494,24 +502,24 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
         if (detail.empty()) detail = safe("target");
         if (detail.empty()) detail = "auto-detect";
         if (auto nl = detail.find('\n'); nl != std::string::npos)
-            detail = detail.substr(0, nl) + " \xe2\x80\xa6";
+            detail = detail.substr(0, nl) + std::string{" "} + ui::mark::ellipsis;
         return detail;
     }
     if (n == "grep") {
         auto pat = safe("pattern");
-        if (pat.empty()) return "\xe2\x80\xa6";
+        if (pat.empty()) return ui::mark::ellipsis;
         std::string detail = path_pp.empty() ? pat : pat + "  in  " + path_pp;
         if (tc.is_done()) {
             int matches = parse_found_count(card_output(tc));
             if (matches == 0)     detail += "  \xc2\xb7  no matches";
-            else if (matches > 0) detail += "  \xc2\xb7  " + std::to_string(matches)
+            else if (matches > 0) detail += ui::mark::gap_sep + std::to_string(matches)
                                           + (matches == 1 ? " match" : " matches");
         }
         return detail;
     }
     if (n == "glob") {
         auto pat = safe("pattern");
-        if (pat.empty()) return "\xe2\x80\xa6";
+        if (pat.empty()) return ui::mark::ellipsis;
         std::string detail = pat;
         if (tc.is_done()) {
             const auto out = card_output(tc);
@@ -519,7 +527,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
             if (out.starts_with("Found more than "))
                 detail += "  \xc2\xb7  500+ hits";
             else if (hits == 0) detail += "  \xc2\xb7  no hits";
-            else if (hits > 0)  detail += "  \xc2\xb7  " + std::to_string(hits)
+            else if (hits > 0)  detail += ui::mark::gap_sep + std::to_string(hits)
                                         + (hits == 1 ? " hit" : " hits");
         }
         return detail;
@@ -529,10 +537,10 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
         // scope when present. (These previously fell to display_description
         // — BLANK whenever the model omitted it.)
         auto pat = safe("pattern");
-        if (pat.empty()) return "\xe2\x80\xa6";
+        if (pat.empty()) return ui::mark::ellipsis;
         if (pat.size() > 48) {
             pat.resize(tools::util::safe_utf8_cut(pat, 47));
-            pat += "\xe2\x80\xa6";
+            pat += ui::mark::ellipsis;
         }
         std::string detail = path_pp.empty() ? pat : pat + "  in  " + path_pp;
         // "Extracted N values." / "Aggregated N matches by ..."
@@ -547,7 +555,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
                 if (got) {
                     const char* one  = n == "extract" ? " value" : " match";
                     const char* many = n == "extract" ? " values" : " matches";
-                    detail += "  \xc2\xb7  " + (v == 0 ? std::string{"none"}
+                    detail += ui::mark::gap_sep + (v == 0 ? std::string{"none"}
                                                     : std::to_string(v) + (v == 1 ? one : many));
                 }
             }
@@ -556,8 +564,8 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
     }
     if (n == "read_filter") {
         auto pat = safe("pattern");
-        std::string detail = path_pp.empty() ? std::string{"\xe2\x80\xa6"} : path_pp;
-        if (!pat.empty()) detail += "  \xc2\xb7  " + pat;
+        std::string detail = path_pp.empty() ? std::string{ui::mark::ellipsis} : path_pp;
+        if (!pat.empty()) detail += ui::mark::gap_sep + pat;
         if (tc.is_done()) {
             // The tool's header has the true count: "path — N matching lines
             // of M". Counting body rows would include the context lines.
@@ -576,21 +584,21 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
             if (kept == 0)
                 detail += "  \xc2\xb7  no matches";
             else if (kept > 0)
-                detail += "  \xc2\xb7  " + std::to_string(kept)
+                detail += ui::mark::gap_sep + std::to_string(kept)
                         + (kept == 1 ? " match" : " matches");
         }
         return detail;
     }
     if (n == "json_query") {
         auto q = safe("query");
-        if (q.empty()) q = "\xe2\x80\xa6";
-        return path_pp.empty() ? q : path_pp + "  \xc2\xb7  " + q;
+        if (q.empty()) q = ui::mark::ellipsis;
+        return path_pp.empty() ? q : path_pp + ui::mark::gap_sep + q;
     }
     if (n == "outline")
-        return path_pp.empty() ? std::string{"\xe2\x80\xa6"} : path_pp;
+        return path_pp.empty() ? std::string{ui::mark::ellipsis} : path_pp;
     if (n == "apply_patch") {
         // Mirror edit: the path is the identity; hunk count from the patch.
-        std::string detail = path_pp.empty() ? std::string{"\xe2\x80\xa6"} : path_pp;
+        std::string detail = path_pp.empty() ? std::string{ui::mark::ellipsis} : path_pp;
         auto patch = safe("patch");
         if (!patch.empty()) {
             int hunks = 0;
@@ -599,7 +607,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
                 ++hunks;
             hunks /= 2;   // each hunk header carries a pair of @@
             if (hunks > 0)
-                detail += "  \xc2\xb7  " + std::to_string(hunks)
+                detail += ui::mark::gap_sep + std::to_string(hunks)
                         + (hunks == 1 ? " hunk" : " hunks");
         }
         return detail;
@@ -607,10 +615,10 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
     if (n == "replace") {
         // find → replacement across a glob; the dry-run/apply mode matters.
         auto find_s = safe("find");
-        if (find_s.empty()) return "\xe2\x80\xa6";
+        if (find_s.empty()) return ui::mark::ellipsis;
         if (find_s.size() > 32) {
             find_s.resize(tools::util::safe_utf8_cut(find_s, 31));
-            find_s += "\xe2\x80\xa6";
+            find_s += ui::mark::ellipsis;
         }
         std::string detail = find_s;
         if (auto g = safe("glob"); !g.empty()) detail += "  in  " + g;
@@ -642,7 +650,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
                 if (nl == std::string::npos) break;
                 start = nl + 1;
             }
-            if (entries > 0) detail += "  \xc2\xb7  " + std::to_string(entries) + " entries";
+            if (entries > 0) detail += ui::mark::gap_sep + std::to_string(entries) + " entries";
         }
         return detail;
     }
@@ -653,16 +661,16 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
             const std::string_view out = card_output(tc);
             for (std::size_t p = 0; (p = out.find("## Matches in ", p)) != std::string::npos; p += 14)
                 ++hits;
-            if (hits > 0) detail += "  \xc2\xb7  " + std::to_string(hits)
+            if (hits > 0) detail += ui::mark::gap_sep + std::to_string(hits)
                                  + (hits == 1 ? " file" : " files");
         }
         return detail;
     }
     if (n == "search_structural") {
         auto pattern = safe("pattern");
-        if (pattern.empty()) pattern = "\xe2\x80\xa6";
+        if (pattern.empty()) pattern = ui::mark::ellipsis;
         if (auto nl = pattern.find('\n'); nl != std::string::npos)
-            pattern = pattern.substr(0, nl) + " \xe2\x80\xa6";
+            pattern = pattern.substr(0, nl) + std::string{" "} + ui::mark::ellipsis;
         return path_pp.empty() ? pattern : pattern + "  in  " + path_pp;
     }
     if (n == "repo_map") {
@@ -678,7 +686,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
             if (nl != std::string::npos && out.starts_with("HTTP ")) {
                 auto sp = out.find(' ', 5);
                 if (sp != std::string::npos)
-                    detail += "  \xc2\xb7  " + std::string{out.substr(5, sp - 5)};
+                    detail += ui::mark::gap_sep + std::string{out.substr(5, sp - 5)};
             }
         }
         return detail;
@@ -694,7 +702,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
                     && (out[p+1] == '.' || (p + 2 < out.size() && out[p+2] == '.')))
                     ++hits;
             }
-            if (hits > 0) detail += "  \xc2\xb7  " + std::to_string(hits)
+            if (hits > 0) detail += ui::mark::gap_sep + std::to_string(hits)
                                  + (hits == 1 ? " result" : " results");
         }
         return detail;
@@ -702,10 +710,10 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
     if (n == "git_show") {
         auto ref = safe("ref");
         if (ref.empty()) ref = "HEAD";
-        return path_pp.empty() ? ref : ref + "  \xc2\xb7  " + path_pp;
+        return path_pp.empty() ? ref : ref + ui::mark::gap_sep + path_pp;
     }
     if (n == "git_blame") {
-        std::string detail = path_pp.empty() ? std::string{"\xe2\x80\xa6"} : path_pp;
+        std::string detail = path_pp.empty() ? std::string{ui::mark::ellipsis} : path_pp;
         auto start = safe_int_arg(tc.args, "start_line", 0);
         auto end = safe_int_arg(tc.args, "end_line", 0);
         if (start > 0) {
@@ -726,7 +734,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
                 if (sp != std::string::npos && sp < close) {
                     std::string hash{out.substr(sp + 1, close - sp - 1)};
                     if (!hash.empty() && hash.size() <= 12)
-                        m += "  \xc2\xb7  " + hash;
+                        m += ui::mark::gap_sep + hash;
                 }
             }
         }
@@ -775,7 +783,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
         }
         std::string detail = branch.empty() ? std::string{"(detached)"} : branch;
         if (modified || staged || untracked || conflicts) {
-            detail += "  \xc2\xb7  ";
+            detail += ui::mark::gap_sep;
             bool first = true;
             auto add = [&](int n_, const char* suffix) {
                 if (n_ <= 0) return;
@@ -794,9 +802,9 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
         return path_pp.empty() ? std::string{"."} : path_pp;
     if (n == "remember") {
         auto text = safe("text");
-        if (text.empty()) return "\xe2\x80\xa6";
+        if (text.empty()) return ui::mark::ellipsis;
         if (auto nl = text.find('\n'); nl != std::string::npos)
-            text = text.substr(0, nl) + " \xe2\x80\xa6";
+            text = text.substr(0, nl) + std::string{" "} + ui::mark::ellipsis;
         auto scope = safe("scope");
         if (scope.empty()) scope = "project";
         std::string detail = "[" + scope + "] " + text;
@@ -805,7 +813,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
             if (auto p = out.find("id="); p != std::string::npos) {
                 auto end = out.find_first_of(")\n ", p + 3);
                 if (end != std::string::npos && end - (p + 3) <= 16)
-                    detail += "  \xc2\xb7  " + std::string{out.substr(p + 3, end - p - 3)};
+                    detail += ui::mark::gap_sep + std::string{out.substr(p + 3, end - p - 3)};
             }
         }
         return detail;
@@ -814,17 +822,17 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
         auto id = safe("id");
         auto sub = safe("substring");
         std::string detail = !id.empty() ? ("id=" + id)
-                            : !sub.empty() ? ("\xe2\x80\x9c" + sub + "\xe2\x80\x9d")
-                            : std::string{"\xe2\x80\xa6"};
+                            : !sub.empty() ? (ui::mark::lquote + sub + ui::mark::rquote)
+                            : std::string{ui::mark::ellipsis};
         if (auto nl = detail.find('\n'); nl != std::string::npos)
-            detail = detail.substr(0, nl) + " \xe2\x80\xa6";
+            detail = detail.substr(0, nl) + std::string{" "} + ui::mark::ellipsis;
         if (tc.is_done()) {
             const std::string_view out = card_output(tc);
             if (out.starts_with("Forgot ")) {
                 auto sp = out.find(' ', 7);
                 if (sp != std::string::npos) {
                     std::string count{out.substr(7, sp - 7)};
-                    detail += "  \xc2\xb7  " + count + " removed";
+                    detail += ui::mark::gap_sep + count + " removed";
                 }
             } else if (out.starts_with("No memory matched")) {
                 detail += "  \xc2\xb7  no match";
@@ -840,18 +848,18 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
     }
     if (n == "skill") {
         auto name = safe("name");
-        return name.empty() ? std::string{"\xe2\x80\xa6"} : name;
+        return name.empty() ? std::string{ui::mark::ellipsis} : name;
     }
     if (n == "search_docs" || n == "search_code" || n == "tool_search") {
         auto query = safe("query");
-        if (query.empty()) return "\xe2\x80\xa6";
+        if (query.empty()) return ui::mark::ellipsis;
         if (auto nl = query.find('\n'); nl != std::string::npos)
-            query = query.substr(0, nl) + " \xe2\x80\xa6";
+            query = query.substr(0, nl) + std::string{" "} + ui::mark::ellipsis;
         return query;
     }
     if (n == "mcp__prompts__get") {
         auto name = safe("name");
-        return name.empty() ? std::string{"\xe2\x80\xa6"} : name;
+        return name.empty() ? std::string{ui::mark::ellipsis} : name;
     }
     if (n == "todo") {
         if (tc.args.is_object()) {
@@ -869,11 +877,11 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
                 }
                 std::string detail = std::to_string(done) + "/" + std::to_string(total);
                 if (in_progress > 0)
-                    detail += "  \xc2\xb7  " + std::to_string(in_progress) + " in progress";
+                    detail += ui::mark::gap_sep + std::to_string(in_progress) + " in progress";
                 return detail;
             }
         }
-        return "\xe2\x80\xa6";
+        return ui::mark::ellipsis;
     }
     if (n == "task") {
         // Header detail: "type · what it's doing". The agent type leads —
@@ -907,11 +915,11 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
                 what.resize(nl);
             if (what.size() > 60) {
                 what.resize(tools::util::safe_utf8_cut(what, 57));
-                what += "\xe2\x80\xa6";
+                what += ui::mark::ellipsis;
             }
         }
         std::string detail = type_tag;
-        if (!what.empty()) detail += "  \xc2\xb7  " + what;
+        if (!what.empty()) detail += ui::mark::gap_sep + what;
         // No live counters here: a running card's HEADER row must stay
         // byte-stable once it crosses into native scrollback (see
         // agent_timeline.cpp elapsed_seconds). The turn/tools/time status is
@@ -925,7 +933,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
                     std::string inner{out.substr(p + 8, end - (p + 8))};
                     if (auto comma = inner.find(", "); comma != std::string::npos)
                         inner = inner.substr(comma + 2);
-                    detail += "  \xc2\xb7  " + inner;
+                    detail += ui::mark::gap_sep + inner;
                 }
             }
         }
@@ -962,7 +970,7 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
     }
     if (n == "find_references") {
         auto sym = safe("symbol");
-        if (sym.empty()) return "\xe2\x80\xa6";
+        if (sym.empty()) return ui::mark::ellipsis;
         return path_pp.empty() || path_pp == "." ? sym
                                                  : sym + "  in  " + path_pp;
     }
@@ -976,9 +984,9 @@ static std::string tool_timeline_detail_base(const ToolUse& tc) {
             if (!it->is_string() && !it->is_number() && !it->is_boolean()) continue;
             std::string v = it->is_string() ? it->get<std::string>() : it->dump();
             if (v.empty()) continue;
-            if (auto nl = v.find('\n'); nl != std::string::npos) v = v.substr(0, nl) + " \xe2\x80\xa6";
-            if (v.size() > 40) { v.resize(39); v += "\xe2\x80\xa6"; }
-            if (!detail.empty()) detail += "  \xc2\xb7  ";
+            if (auto nl = v.find('\n'); nl != std::string::npos) v = v.substr(0, nl) + std::string{" "} + ui::mark::ellipsis;
+            if (v.size() > 40) { v.resize(39); v += ui::mark::ellipsis; }
+            if (!detail.empty()) detail += ui::mark::gap_sep;
             detail += it.key() + " " + v;
             ++shown;
         }
@@ -1007,7 +1015,7 @@ static std::string change_stat(std::string_view out) {
         if (i == r || i + 1 >= out.size() || out[i] != '-' || out[i + 1] != ')') continue;
         const auto rem = out.substr(r, i - r);
         std::string s = "+" + std::string{add};
-        if (rem != "0") s += " \xe2\x88\x92" + std::string{rem};
+        if (rem != "0") s += std::string{" "} + ui::mark::minus + std::string{rem};
         return s;
     }
     return {};
@@ -1032,14 +1040,14 @@ std::string tool_timeline_detail(const ToolUse& tc) {
     const auto& n = tc.name.value;
     if (tc.is_done() && (n == "edit" || n == "write" || n == "apply_patch")) {
         if (auto st = change_stat(card_output(tc)); !st.empty())
-            detail += "  \xc2\xb7  " + st;
+            detail += ui::mark::gap_sep + st;
     }
     if (tc.is_failed()) {
         std::string reason = tool_failure_reason(tc);
         if (reason.empty()) reason = "failed";
         // Avoid a redundant "· failed · failed" if a base branch already said it.
         if (detail.find(reason) == std::string::npos)
-            detail += detail.empty() ? reason : "  \xc2\xb7  " + reason;
+            detail += detail.empty() ? reason : ui::mark::gap_sep + reason;
     }
     return detail;
 }

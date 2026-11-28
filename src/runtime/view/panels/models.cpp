@@ -4,6 +4,7 @@
 // owns every chrome decision. Shared scaffolding: panels_prologue.hpp.
 
 #include "panels_prologue.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -99,7 +100,7 @@ Element models_panel(const Model& m) {
             if (pending.size() > shown)
                 who += " +" + std::to_string(pending.size() - shown);
             cfg.header.push_back(maya::Line{"  " + std::string{m.s.spinner.current_frame()}
-                    + " loading " + who + "\xe2\x80\xa6", fg_italic(muted)});
+                    + " loading " + who + ui::mark::ellipsis, fg_italic(muted)});
         }
         // One line per failed provider with the server's own reason, so a
         // rejected key reads as that and not as "this host has no models".
@@ -107,10 +108,10 @@ Element models_panel(const Model& m) {
             const auto& c = *failed[i];
             const std::string why = c.error.empty()
                 ? std::string{"couldn't load models"} : c.error;
-            cfg.header.push_back(maya::Line{"  \xe2\x9a\xa0 " + c.label + " \xc2\xb7 " + why, fg_of(warn)});
+            cfg.header.push_back(maya::Line{std::string{"  "} + ui::mark::warn + " " + c.label + ui::mark::sep + why, fg_of(warn)});
         }
         if (failed.size() > 3)
-            cfg.header.push_back(maya::Line{"  \xe2\x9a\xa0 +" + std::to_string(failed.size() - 3)
+            cfg.header.push_back(maya::Line{std::string{"  "} + ui::mark::warn + " +" + std::to_string(failed.size() - 3)
                     + " more failed \xc2\xb7 ^L to retry", fg_of(warn)});
         else if (!failed.empty())
             cfg.header.push_back(maya::Line{"    ^L retry \xc2\xb7 ^P fix the key or address", fg_dim(muted)});
@@ -228,7 +229,7 @@ Element models_panel(const Model& m) {
                 // and repeating it per row would steal width from the name.
                 const auto* pa = m.d.auth.find(picker->provider_scope);
                 if (pa && pa->accounts.size() > 1 && !pa->active_account.empty())
-                    others_label += "  \xc2\xb7  " + pa->active_account;
+                    others_label += ui::mark::gap_sep + pa->active_account;
             }
 
             // Uniform section divider — label + hue + right-pinned count. See
@@ -258,7 +259,7 @@ Element models_panel(const Model& m) {
             Panel::Item row;
             row.leading       = "  " + r.label;
             row.leading_style = selected ? fg_bold(fg) : fg_of(muted);
-            row.trailing       = "Enter to sign in \xe2\x86\x92";   // →
+            row.trailing       = std::string{"Enter to sign in "} + ui::mark::arrow;   // →
             row.trailing_style = fg_dim(muted);
             cfg.items.push_back(std::move(row));
             continue;
@@ -339,11 +340,11 @@ Element models_panel(const Model& m) {
         std::string trailing = ctx.size() < 5
             ? std::string(5 - ctx.size(), ' ') + ctx
             : ctx;
-        trailing += r.model.favorite ? "  \xe2\x98\x85" : "   ";      // ★
+        trailing += r.model.favorite ? std::string{"  "} + ui::mark::star : "   ";      // ★
         // Reasoning badge (precomputed in build_fused_rows) — marks models
         // that can think, so "which of these reason" is legible across
         // providers.
-        trailing += r.reasons ? " \xe2\x9c\xa6" : "  ";               // ✦
+        trailing += r.reasons ? std::string{" "} + ui::mark::sparkle : "  ";               // ✦
         row.trailing       = std::move(trailing);
         // Dim by default: the trailing cell is REFERENCE data, not the thing
         // you are choosing between. It used to share the composer's warm
@@ -410,7 +411,7 @@ Element models_panel(const Model& m) {
                                                               : "favorite";
     if (picker->assign_slot)
         cfg.footer.push_back(key_hints({
-            {"\xe2\x86\x91\xe2\x86\x93", "move", 5},
+            {ui::mark::updown, "move", 5},
             {"Enter", "pin to role", 5},
             {"^F", hl_offer ? "" : fav_hint, 1},
             {"^/", scoped ? "all providers" : "provider", 2},
@@ -419,7 +420,7 @@ Element models_panel(const Model& m) {
           }));
     else
         cfg.footer.push_back(key_hints({
-            {"\xe2\x86\x91\xe2\x86\x93", "move", 5},
+            {ui::mark::updown, "move", 5},
             {"Enter", hl_offer ? "sign in" : "switch", 5},
             {"^F", hl_offer ? "" : fav_hint, 1},
             {"^/", scoped ? "all providers" : "provider", 2},

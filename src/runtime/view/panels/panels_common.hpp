@@ -28,6 +28,7 @@
 #include "agentty/runtime/view/palette.hpp"
 #include "agentty/provider/registry.hpp"    // wire_streams_reasoning_text
 #include "agentty/provider/selection.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 // maya's widget, style and data types, by name -- never `using namespace
@@ -205,13 +206,14 @@ inline constexpr int kPickerChromeRows = 7;
 // same thing without colour — WCAG 1.4.1).
 [[nodiscard]] inline maya::Color tier_hue(ModelCapabilities::Tier t) {
     using T = ModelCapabilities::Tier;
+    using L = maya::look::ink::Tier;
     switch (t) {
-        case T::Flagship: return role_brand_alt;  // bright magenta — top lane
-        case T::Mid:      return role_info;        // blue — workhorse lane
-        case T::Cheap:    return code_path;        // bright cyan — fast/small
-        case T::Weak:     return muted;            // grey — tool-use unreliable
+        case T::Flagship: return maya::look::ink::tier(L::Flagship);
+        case T::Mid:      return maya::look::ink::tier(L::Mid);
+        case T::Cheap:    return maya::look::ink::tier(L::Cheap);
+        case T::Weak:     return maya::look::ink::tier(L::Weak);
     }
-    return muted;
+    return maya::look::ink::tier(L::Weak);
 }
 
 
@@ -282,9 +284,9 @@ reasoning_effort_footer(const Model& m, std::string_view model_id,
         for (Effort lvl : available_efforts(caps)) {
             const std::string lbl{effort_label(lvl)};
             if (lvl == shown) {
-                parts.add("\xe2\x80\xb9", fg_of(accent));      // ‹
+                parts.add(ui::mark::chevron_back, fg_of(accent));      // ‹
                 parts.add(lbl, fg_bold(accent));
-                parts.add("\xe2\x80\xba ", fg_of(accent));   // ›
+                parts.add(std::string{ui::mark::chevron} + " ", fg_of(accent));   // ›
             } else {
                 parts.add(lbl + " ", fg_dim(muted));
             }

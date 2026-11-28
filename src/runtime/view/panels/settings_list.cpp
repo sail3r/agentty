@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <string>
+#include "agentty/runtime/view/look.hpp"
 
 namespace pn = agentty::ui::panel;
 
@@ -43,9 +44,9 @@ struct Badge { std::string glyph; Color color; };
 // server never wears a scary red ✕.
 Badge status_badge(se::Item::Status s) {
     switch (s) {
-        case se::Item::Status::Ok:      return {"\xe2\x97\x8f", success};  // ● connected/healthy
-        case se::Item::Status::Pending: return {"\xe2\x97\x8c", muted};    // ◌ connecting…
-        case se::Item::Status::Bad:     return {"\xe2\x9a\xa0", warn};     // ⚠ error/attention
+        case se::Item::Status::Ok:      return {ui::mark::on, success};  // ● connected/healthy
+        case se::Item::Status::Pending: return {ui::mark::pending, muted};    // ◌ connecting…
+        case se::Item::Status::Bad:     return {ui::mark::warn, warn};     // ⚠ error/attention
         case se::Item::Status::Neutral:
         default:                        return {" ", muted};
     }
@@ -64,10 +65,10 @@ Badge status_badge(se::Item::Status s) {
 std::optional<Badge> nav_badge(se::Action a) {
     // Every door, from the enum's own definition — not a list restated here
     // and left to drift.
-    if (se::opens_pane(a)) return Badge{"\xe2\x86\x92", highlight};   // →
+    if (se::opens_pane(a)) return Badge{ui::mark::arrow, highlight};   // →
     // Cycling a value in place is not a door: it changes something HERE, so
     // it gets a distinct glyph rather than the one that means "leads away".
-    if (a == se::Action::CycleProfile) return Badge{"\xe2\x86\xbb", info};  // ↻
+    if (a == se::Action::CycleProfile) return Badge{ui::mark::redo, info};  // ↻
     return std::nullopt;
 }
 
@@ -132,10 +133,9 @@ Element settings_list_panel(const Model& m) {
             panel_detail::panel_terminal_cols() - 12, &at);
         // Same caret as every panel field: the terminal's blinking block
         // cursor on a blank cell, coloured via OSC 12.
-        const auto caret = Style{}.with_fg(highlight).with_conceal()
-                                  .with_caret_anchor().with_caret_shape(1);
+        const auto caret = ui::tone::caret(highlight);
         cfg.header.push_back(Line{
-            {"  \xe2\x9c\x8e  ", fg_of(highlight)},         // ✎ pencil
+            {std::string{"  "} + ui::mark::edit + "  ", fg_of(highlight)},         // ✎ pencil
             {shown.substr(0, at), fg_bold(fg)},
             {shown.substr(at, 3), caret},
             {shown.substr(at + 3), fg_bold(fg)}});
@@ -174,7 +174,7 @@ Element settings_list_panel(const Model& m) {
         }
         if (pm.on_demand_count > 0) line2 += " \xc2\xb7 the model searches for the rest";
         if (pm.cap.deferred > 0)
-            line2 += " \xc2\xb7 " + std::to_string(pm.cap.deferred)
+            line2 += ui::mark::sep + std::to_string(pm.cap.deferred)
                    + " deferred (addressable by name)";
         cfg.header.push_back(maya::Line{{"  "}, {line1, fg_bold(fg)}});
         cfg.header.push_back(maya::Line{{"  "}, {line2, fg_dim(muted)}});
@@ -207,7 +207,7 @@ Element settings_list_panel(const Model& m) {
         for (int k = 0; k < static_cast<int>(hits.size()); ++k) {
             const auto& hit = o->index_rows[static_cast<std::size_t>(hits[static_cast<std::size_t>(k)])];
             Panel::Item row;
-            row.badge       = "\xe2\x86\x92";   // → opens a pane
+            row.badge       = ui::mark::arrow;   // → opens a pane
             row.badge_style = fg_of(highlight);
             row.leading       = hit.label;
             row.leading_style = fg_of(fg);
@@ -216,7 +216,7 @@ Element settings_list_panel(const Model& m) {
             row.highlight_fg  = highlight;
             // The current value stands out; where it lives stays quiet.
             std::string where = se::pane_label(hit.pane);
-            if (!hit.section.empty()) where += " \xc2\xb7 " + hit.section;
+            if (!hit.section.empty()) where += ui::mark::sep + hit.section;
             if (!hit.value.empty()) {
                 row.trailing       = hit.value;
                 row.trailing_style = fg_of(info);
@@ -233,8 +233,8 @@ Element settings_list_panel(const Model& m) {
         if (!hits.empty())
             cfg.footer.push_back(maya::Line{"  " + std::to_string(o->index + 1) + "/" + std::to_string(hits.size())
                     + " settings", fg_dim(muted)});
-        cfg.footer.push_back(key_hints({{"\xe2\x86\x91\xe2\x86\x93", "move", 5},
-                                        {"\xe2\x86\xb5", "open", 5},
+        cfg.footer.push_back(key_hints({{ui::mark::updown, "move", 5},
+                                        {ui::mark::enter, "open", 5},
                                         {"esc", "clear", 5}}));
         return Panel{std::move(cfg)}.build();
     }
@@ -258,12 +258,12 @@ Element settings_list_panel(const Model& m) {
             const bool last =
                 (i + 1 >= static_cast<int>(rows.size()))
                 || !rows[static_cast<std::size_t>(i + 1)].indented;
-            const char* elbow = last ? "\xe2\x94\x94\xe2\x94\x80 "   // └─
-                                     : "\xe2\x94\x9c\xe2\x94\x80 ";  // ├─
+            const char* elbow = last ? ui::mark::branch_end   // └─
+                                     : ui::mark::branch;  // ├─
             // ⚠ for a tool left out for a bad schema, so it isn't mistaken for on.
             const bool bad    = it.status == se::Item::Status::Bad;
-            const char* box   = bad ? "\xe2\x9a\xa0"
-                                    : (it.on ? "\xe2\x97\x89" : "\xe2\x97\x8b"); // ⚠ / ◉ / ○
+            const char* box   = bad ? ui::mark::warn
+                                    : (it.on ? ui::mark::selected : ui::mark::off); // ⚠ / ◉ / ○
             row.badge       = std::string("  ") + elbow + box;
             // Connector + box are structural — dim; the tool NAME carries the
             // on/off emphasis. But when the tool is INACTIVE (its plugin is
@@ -277,13 +277,13 @@ Element settings_list_panel(const Model& m) {
             // The tool's description, only on the focused row, so a long
             // list stays one line per tool.
             if (i == o->index && !it.detail.empty())
-                row.help = std::string{last ? "   " : "\xe2\x94\x82  "} + it.detail;   // │ keeps the tree
+                row.help = std::string{last ? "   " : std::string{ui::mark::rail_thin} + "  "} + it.detail;   // │ keeps the tree
         } else {
             row.badge       = b.glyph;
             row.badge_style = fg_of(adding ? muted : b.color);
             // A server with tools shows whether its list is open.
             row.leading       = it.expandable
-                ? std::string{it.expanded ? "\xe2\x96\xbe " : "\xe2\x96\xb8 "} + it.primary   // ▾ / ▸
+                ? std::string{it.expanded ? std::string{ui::mark::open} + " " : std::string{ui::mark::cursor} + " "} + it.primary   // ▾ / ▸
                 : it.primary;
             row.leading_style = fg_of(adding ? muted : fg);
         }
@@ -311,7 +311,7 @@ Element settings_list_panel(const Model& m) {
         // else disarms.
         if (!adding && !it.indented && !it.arg.empty()
             && o->confirm_remove == it.arg) {
-            row.badge       = "\xe2\x9a\xa0";           // ⚠
+            row.badge       = ui::mark::warn;           // ⚠
             row.badge_style = fg_of(warn);
             row.leading_style = fg_bold(warn);
             row.trailing       = "press d again to remove";
@@ -325,7 +325,7 @@ Element settings_list_panel(const Model& m) {
         // Mode hint in the note line — the same slot the panel's derived
         // editing hint uses, so the add prompt reads like every other
         // editing mode (armed-delete gets the same treatment below).
-        cfg.note = "typing \xc2\xb7 \xe2\x86\xb5 create \xc2\xb7 esc cancel";
+        cfg.note = std::string{"typing"} + ui::mark::sep + ui::mark::enter + " create" + ui::mark::sep + "esc cancel";
     } else if (!o->confirm_remove.empty()) {
         cfg.note = "d confirm remove \xc2\xb7 any other key cancels";
     } else {
@@ -335,14 +335,14 @@ Element settings_list_panel(const Model& m) {
         if (o->index >= 0 && o->index < static_cast<int>(rows.size()))
             act_hint = rows[static_cast<std::size_t>(o->index)].hint;
         if (!act_hint.empty())
-            cfg.footer.push_back(maya::Line{{"  \xe2\x86\xb5 ", fg_of(highlight)}, {act_hint, fg_of(fg)}});
+            cfg.footer.push_back(maya::Line{{std::string{"  "} + ui::mark::enter + " ", fg_of(highlight)}, {act_hint, fg_of(fg)}});
 
         // The shared key_hints idiom (hints.hpp), not hand-built runs —
         // every other picker's footer goes through it, and the drift this
         // file had (its own spacing, its own hue choices) is exactly what
         // the helper exists to prevent. Conditional verbs stay conditional.
-        std::vector<Hint> keys{{"\xe2\x86\x91\xe2\x86\x93", "move", 5},
-                               {"\xe2\x86\xb5", "act", 5}};
+        std::vector<Hint> keys{{ui::mark::updown, "move", 5},
+                               {ui::mark::enter, "act", 5}};
         if (o->concern == se::Category::General) keys.push_back({"type", "search", 4});
         if (o->concern == se::Category::Plugins) {
             // Only keys that do something on THIS row.
@@ -358,11 +358,11 @@ Element settings_list_panel(const Model& m) {
                 && (cur->action == se::Action::TogglePlugin
                     || cur->action == se::Action::ApprovePlugin);
             if (cur && cur->expandable)
-                keys.push_back({cur->expanded ? "\xe2\x86\x90" : "\xe2\x86\x92",   // ← / →
+                keys.push_back({cur->expanded ? ui::mark::back : ui::mark::arrow,   // ← / →
                                 cur->expanded ? "hide tools" : "show tools", 4});
             if (on_tool && cur->on && !cur->inactive)
                 keys.push_back({"p", cur->pinned ? "unpin" : "pin", 3});
-            if (on_tool) keys.push_back({"\xe2\x86\x90", "back", 4});
+            if (on_tool) keys.push_back({ui::mark::back, "back", 4});
             keys.push_back({"a", "add", 2, success});
             if (on_server) {
                 keys.push_back({"e", "edit", 3});

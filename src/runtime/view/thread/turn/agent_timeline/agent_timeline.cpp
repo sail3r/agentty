@@ -16,6 +16,7 @@
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_body_preview.hpp"
 #include "agentty/domain/ui_live.hpp"   // tool_output: how much body to show
 #include "agentty/runtime/view/thread/turn/agent_timeline/tool_helpers.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 namespace {
@@ -352,7 +353,7 @@ maya::AgentTimeline::Config agent_timeline_config(std::span<const ToolUse> tool_
             detail = tc.is_running()  ? std::string{"running\xe2\x80\xa6"}
                    : tc.is_pending()  ? std::string{"queued\xe2\x80\xa6"}
                    : tc.is_approved() ? std::string{"approved\xe2\x80\xa6"}
-                                      : std::string{"\xe2\x80\xa6"};
+                                      : std::string{ui::mark::ellipsis};
         }
         // Per-event hash_id on every TERMINAL tool event — live tail
         // AND frozen snapshot. Once a tool is terminal its bytes are
@@ -577,20 +578,20 @@ maya::AgentTimeline::Config agent_timeline_config(std::span<const ToolUse> tool_
         std::string agent_turn;   // "turn 7/80" while one subagent runs
         maya::AgentTimelineFooter f;
         if (all_done) {
-            f.glyph = "\xe2\x9c\x93";   // ✓
+            f.glyph = ui::mark::ok;   // ✓
             f.text  = "done";
             f.color = success;
             if (failed > 0) {
-                f.glyph = "\xe2\x9c\x97";           // ✗
+                f.glyph = ui::mark::fail;           // ✗
                 f.text  = std::to_string(failed) + " failed";
                 f.color = danger;
             } else if (rejected > 0) {
-                f.glyph = "\xe2\x8a\x98";           // ⊘
+                f.glyph = ui::mark::blocked;           // ⊘
                 f.text  = std::to_string(rejected) + " rejected";
                 f.color = warn;
             } else if (cancelled > 0) {
                 // You stopped it: neutral, not an error.
-                f.glyph = "\xe2\x8a\x98";           // ⊘
+                f.glyph = ui::mark::blocked;           // ⊘
                 f.text  = "cancelled";
                 f.color = muted;
             }
@@ -638,14 +639,14 @@ maya::AgentTimeline::Config agent_timeline_config(std::span<const ToolUse> tool_
                 const std::string_view pt = tool_calls[std::size_t(running_idx)].progress_text();
                 const std::string_view first = pt.substr(0, pt.find('\n'));
                 if (auto at = first.find("turn "); at != std::string_view::npos) {
-                    const auto end = first.find(" \xc2\xb7", at);
+                    const auto end = first.find(std::string{" "} + ui::mark::dot, at);
                     agent_turn = std::string{first.substr(at, end == std::string_view::npos ? std::string_view::npos : end - at)};
                 }
             }
         }
         f.summary = std::to_string(done) + "/" + std::to_string(total)
                   + (total == 1 ? " action" : " actions")
-                  + (agent_turn.empty() ? std::string{} : " \xc2\xb7 " + agent_turn)
+                  + (agent_turn.empty() ? std::string{} : ui::mark::sep + agent_turn)
                   + "   " + format_duration_compact(total_elapsed);
         cfg.footer = std::move(f);
     }

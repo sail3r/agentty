@@ -16,6 +16,7 @@
 #include <maya/widget/agentty/panel.hpp>
 
 #include <string>
+#include "agentty/runtime/view/look.hpp"
 
 namespace pn = agentty::ui::panel;
 
@@ -79,7 +80,7 @@ Element fork_panel(const Model& m) {
     // narrow pane it overflowed instead of dropping the least important hint
     // like every other panel's footer does.
     cfg.footer.push_back(key_hints({
-        {"\xe2\x86\x91\xe2\x86\x93", "choose", 5},   // ↑↓
+        {ui::mark::updown, "choose", 5},   // ↑↓
         {"Enter", "fork", 4},
         {"Esc", "close", 3},
     }));

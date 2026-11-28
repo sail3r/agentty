@@ -9,6 +9,7 @@
 #include "agentty/runtime/view/helpers.hpp"
 #include "agentty/runtime/view/palette.hpp"
 #include "agentty/provider/selection.hpp"   // provider::active (local-host verb)
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -94,7 +95,7 @@ maya::PhaseChip::Config phase_chip_config(const Model& m) {
     // permission prompt lives in the in-thread modal; this chip just
     // gives the user a glance-able "you have a decision to make".
     if (is_awaiting) {
-        glyph     = "⚠";
+        glyph     = ui::mark::warn;
         color     = status_warn;
         breathing = true;
         elapsed   = phase_elapsed;
@@ -211,7 +212,7 @@ maya::PhaseChip::Config phase_chip_config(const Model& m) {
     // status-bar mirror so a glance at the chrome confirms "yes, your
     // typed message is sitting in the queue, not lost".
     else if (!m.ui.composer.queued.empty()) {
-        glyph     = "▸";
+        glyph     = ui::mark::cursor;
         verb      = "+" + std::to_string(m.ui.composer.queued.size()) + " queued";
         color     = role_brand_alt;
         breathing = false;

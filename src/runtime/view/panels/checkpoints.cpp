@@ -5,6 +5,7 @@
 
 #include "panels_prologue.hpp"
 #include <maya/core/anim_clock.hpp>   // anim_now: the frame clock
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -55,7 +56,7 @@ Element checkpoints_panel(const Model& m) {
         std::string stat;
         switch (e.diff_state) {
             case checkpoints::Entry::DiffState::Loading:
-                stat = "\xe2\x80\xa6";   // …
+                stat = ui::mark::ellipsis;   // …
                 break;
             case checkpoints::Entry::DiffState::Failed:
                 stat = "";
@@ -67,13 +68,13 @@ Element checkpoints_panel(const Model& m) {
                     stat = std::to_string(e.files_changed)
                          + (e.files_changed == 1 ? " file" : " files");
                     if (e.insertions > 0) stat += " +" + std::to_string(e.insertions);
-                    if (e.deletions  > 0) stat += " \xe2\x88\x92" + std::to_string(e.deletions); // −
+                    if (e.deletions  > 0) stat += std::string{" "} + ui::mark::minus + std::to_string(e.deletions); // −
                 }
                 break;
         }
         std::string trailing = when;
         if (!stat.empty())
-            trailing += (when.empty() ? "" : " \xc2\xb7 ") + stat;
+            trailing += (when.empty() ? "" : ui::mark::sep) + stat;
         row.trailing = std::move(trailing);
         // Green when a real rewind (has changes), dim when clean/no-stat.
         const bool has_changes =
@@ -85,7 +86,7 @@ Element checkpoints_panel(const Model& m) {
     cfg.footer.push_back(maya::Line::blank());
     cfg.footer.push_back(maya::Line{"  Restores files and rewinds the transcript here.", fg_dim(muted)});
     cfg.footer.push_back(key_hints({
-        {"\xe2\x86\x91\xe2\x86\x93", "move", 5},   // ↑↓
+        {ui::mark::updown, "move", 5},   // ↑↓
         {"Enter", "rewind", 3},
         {"Esc", "cancel", 4},
     }));

@@ -5,6 +5,7 @@
 
 #include "agentty/foreign/sessions.hpp"
 #include <maya/widget/agentty/report.hpp>
+#include <maya/widget/agentty/look.hpp>
 
 #include "agentty/io/persistence.hpp"
 #include "agentty/util/base64.hpp"
@@ -1207,7 +1208,7 @@ int cli(Io io, const std::vector<std::string>& argv) {
     }
     if (dump < 0) {
         namespace rep = maya::report;
-        const maya::Style dim = maya::Style{}.with_dim();
+        const maya::Style dim = maya::look::tone::dim();
         std::vector<maya::Element> rows;
         int n = 0;
         for (const auto& t : s.sessions) {

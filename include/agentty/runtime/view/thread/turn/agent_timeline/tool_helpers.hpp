@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 
+#include <maya/widget/agentty/look.hpp>
 #include <maya/style/color.hpp>
 #include <maya/widget/agentty/agent_timeline.hpp>
 
@@ -16,6 +17,7 @@
 namespace agentty::ui {
 
 [[nodiscard]] std::string             tool_display_name(const std::string& name);
+[[nodiscard]] maya::look::ink::ToolCat tool_category(const std::string& name);
 [[nodiscard]] maya::Color             tool_category_color(const std::string& name);
 [[nodiscard]] std::string_view        tool_category_label(const std::string& name);
 [[nodiscard]] maya::AgentEventStatus  tool_event_status(const ToolUse& tc);

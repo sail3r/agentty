@@ -32,6 +32,7 @@
 
 #include "agentty/runtime/panel/skills.hpp"
 #include "agentty/tool/skills.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -155,7 +156,7 @@ Element skills_panel(const Model& m) {
                 cfg.footer.push_back(Line::hanging(prefix, f.detail, sty));
             }
             if (sel->findings.size() > 4)
-                note("\xe2\x80\xa6 " + std::to_string(sel->findings.size() - 4) +
+                note(std::string{ui::mark::ellipsis} + " " + std::to_string(sel->findings.size() - 4) +
                          " more \xe2\x80\x94 agentty skill list",
                      fg_dim(muted));
 
@@ -196,7 +197,7 @@ Element skills_panel(const Model& m) {
     }
 
     cfg.footer.push_back(key_hints({
-        {"\xe2\x86\x91\xe2\x86\x93", "move", 5},   // ↑↓
+        {ui::mark::updown, "move", 5},   // ↑↓
         {"Esc", "close", 4},
     }));
 
@@ -248,7 +249,7 @@ Element skills_panel(const Model& m) {
         if (r.gated) state = r.trusted ? "approved" : "PENDING";
 
         std::string trailing = decl;
-        if (!state.empty()) trailing += " \xc2\xb7 " + state;   // ·
+        if (!state.empty()) trailing += ui::mark::sep + state;   // ·
         row.trailing = std::move(trailing);
         row.trailing_style = (r.gated && !r.trusted) ? fg_of(warn)
                                                      : fg_dim(muted);

@@ -14,6 +14,7 @@
 
 #include "agentty/domain/ui_live.hpp"
 #include "agentty/runtime/view/palette.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace pn = agentty::ui::panel;
 
@@ -339,8 +340,8 @@ maya::Element diff_review(const Model& m) {
             return maya::KeyHint{std::move(k), std::move(l), p, c};
         };
         cfg.hints = {hint("y", "keep", 9, success), hint("n", "undo", 9, danger),
-                     hint("\xe2\x86\x91\xe2\x86\x93", "change", 7)};
-        if (files.size() > 1) cfg.hints.push_back(hint("\xe2\x86\x90\xe2\x86\x92", "file", 6));
+                     hint(ui::mark::updown, "change", 7)};
+        if (files.size() > 1) cfg.hints.push_back(hint(ui::mark::leftright, "file", 6));
         if (focused_overflows) cfg.hints.push_back(hint("PgUp/PgDn", "scroll", 3));
         cfg.hints.push_back(hint("^A", "keep all", 4, success));
         cfg.hints.push_back(hint("^X", "undo all", 4, danger));

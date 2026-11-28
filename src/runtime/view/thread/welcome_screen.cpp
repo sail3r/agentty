@@ -6,6 +6,7 @@
 #include "agentty/domain/model_name.hpp"
 #include "agentty/runtime/view/helpers.hpp"
 #include "agentty/runtime/view/palette.hpp"
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -52,7 +53,7 @@ maya::WelcomeScreen::Config welcome_screen_config(const Model& m) {
     // get distinct semantic colors.
     cfg.hints          = {{"^K",    " palette", code_path},      // cyan — actions
                           {"^J",    " threads", role_info},      // blue — navigation
-                          {"^\xe2\x86\x90\xe2\x86\x92", " cycle", role_info},   // blue — navigation (^←→)
+                          {std::string{"^"} + ui::mark::leftright, " cycle", role_info},   // blue — navigation (^←→)
                           {"^T",    " todo",    warn},           // yellow — planning
                           {"S-Tab", " profile", role_brand},     // magenta — identity
                           {"^/",    " models",  role_brand_alt}, // bright magenta

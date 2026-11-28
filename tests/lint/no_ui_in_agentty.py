@@ -72,6 +72,30 @@ LAYOUT = re.compile(
     r"\\x[eE]2\\x96\\x[bB]8")
 LITERAL = re.compile(r'"(?:[^"\\\n]|\\.)*"')
 
+# Deciding a look by hand: a theme slot, a colour constructor, a fresh Style,
+# a Style attribute. agentty names a role from maya::look instead.
+RAW_LOOK = re.compile(r"\bThemeSlot::|\bColor::(?:slot|rgb|hex|named|indexed|default_color|black|red|green|yellow|blue|magenta|cyan|white|bright_\w+)\b"
+                      r"|\bStyle\s*\{\s*\}|\.with_(?:fg|bg|bold|dim|italic|underline|inverse|strikethrough|conceal|blink|caret_anchor|caret_shape)\s*\(")
+# Icon glyphs: anything outside ASCII that is not prose typography.
+TYPOGRAPHY = set("\u00b7\u00d7\u2013\u2014\u2018\u2019\u201c\u201d\u2026\u2212\u00a0\u203a\u2039")
+# Files that read a wire PROTOCOL whose markers happen to be glyphs (a
+# subagent feed's diamond, a diff tag): parsing, not drawing.
+GLYPH_PROTOCOL = {"src/runtime/view/thread/turn/agent_timeline/task_body.cpp",
+                  "src/runtime/view/thread/turn/agent_timeline/tool_body_common.cpp"}
+VIEW = ("src/runtime/view/", "include/agentty/runtime/view/")
+
+
+def decode(lit):
+    try:
+        return bytes(lit, "utf-8").decode("unicode_escape").encode("latin1").decode("utf-8")
+    except Exception:
+        return ""
+
+
+def has_icon(lit):
+    return any(ord(c) > 127 and c not in TYPOGRAPHY and not 0xE000 <= ord(c) <= 0xF8FF
+               for c in decode(lit))
+
 RULES = [
     ("DSL namespace",   re.compile(r"\busing\s+namespace\s+maya\b")),
     ("DSL namespace",   re.compile(r"(?<![\w:])dsl::")),
@@ -175,6 +199,13 @@ for base in SCAN:
                     violations.append((os.path.relpath(p, ROOT), ln, "raw escape", line.strip()))
                 elif RUNS.search(LITERAL.sub('""', line)):
                     violations.append((os.path.relpath(p, ROOT), ln, "styled runs", line.strip()))
+                elif RAW_LOOK.search(LITERAL.sub('""', line)):
+                    violations.append((os.path.relpath(p, ROOT), ln, "raw look", line.strip()))
+                elif (os.path.relpath(p, ROOT).startswith(VIEW)
+                      and os.path.relpath(p, ROOT) not in GLYPH_PROTOCOL
+                      and not line.lstrip().startswith("#")
+                      and any(has_icon(l[1:-1]) for l in LITERAL.findall(line))):
+                    violations.append((os.path.relpath(p, ROOT), ln, "icon glyph", line.strip()))
             # An output statement runs from the call to its `;`; its format
             # string is often on a later line.
             for m in OUTPUT.finditer(raw):

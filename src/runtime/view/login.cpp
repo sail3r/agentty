@@ -31,6 +31,7 @@
 #include "agentty/runtime/view/palette.hpp"
 
 #include <maya/widget/agentty/login_pane.hpp>
+#include "agentty/runtime/view/look.hpp"
 
 namespace agentty::ui {
 
@@ -69,7 +70,7 @@ Blocks picking_blocks(std::string_view provider, bool failed, std::string_view f
           "change this any time from the provider picker."));
     b.push_back(LP::gap());
     if (failed) {
-        b.push_back(LP::danger(std::string{"\xE2\x9A\xA0 "} + std::string{fail_msg}));
+        b.push_back(LP::danger(std::string{std::string{ui::mark::warn} + " "} + std::string{fail_msg}));
         b.push_back(LP::gap());
     }
     // API key FIRST: the unambiguous, provider-neutral path, whereas
@@ -106,7 +107,7 @@ LP::Config input_config(std::string title, Blocks prose, maya::PanelControl cont
     cfg.min_width = 48;
     cfg.selected  = 0;
     maya::Panel::Item it;
-    it.leading = "\xe2\x80\xba";                    // › — the prompt marker
+    it.leading = ui::mark::chevron;                    // › — the prompt marker
     it.leading_style = fg_bold(accent);
     it.control = std::move(control);
     // Prompt-style: the input hugs the › (this row has no label column).
@@ -134,8 +135,8 @@ LP::Config oauth_code(const login::OAuthCode& s) {
     Blocks footer{LP::gap(), LP::hints({{"c", "copy URL"}, {"o", "open browser"},
                                         {"^Y", "copy"}, {"^O", "open"}})};
     return input_config(" OAuth via claude.ai ", std::move(prose), std::move(sec),
-                        "\xe2\x86\xb5 submit code \xc2\xb7 esc cancel",
-                        "\xe2\x86\xb5 submit code \xc2\xb7 esc cancel", std::move(footer));
+                        std::string{ui::mark::enter} + " submit code" + ui::mark::sep + "esc cancel",
+                        std::string{ui::mark::enter} + " submit code" + ui::mark::sep + "esc cancel", std::move(footer));
 }
 
 Blocks oauth_exchanging() {
@@ -250,8 +251,8 @@ LP::Config api_key(const login::ApiKeyInput& s) {
                                 : "paste API key\xe2\x80\xa6";
     const char* back = login::has_parent(s.origin) ? "esc back" : "esc cancel";
     const std::string enter = optional && s.key_input.empty()
-        ? "\xe2\x86\xb5 continue without a key \xc2\xb7 "
-        : "\xe2\x86\xb5 submit \xc2\xb7 ";
+        ? std::string{ui::mark::enter} + " continue without a key" + ui::mark::sep
+        : std::string{ui::mark::enter} + " submit" + ui::mark::sep;
     return input_config(
         " " + (anthropic ? std::string{"Anthropic"} : s.provider_label) + " API key ",
         std::move(prose), std::move(sec), enter + back, enter + back);
@@ -260,7 +261,7 @@ LP::Config api_key(const login::ApiKeyInput& s) {
 // Connect probe in flight: name the host and what's being tried so the
 // short wait reads as WORK, not a hang. Esc cancels back to the input.
 Blocks host_probing(const login::HostProbing& s) {
-    return {LP::title("Checking " + s.spec + "\xe2\x80\xa6"), LP::gap(),
+    return {LP::title("Checking " + s.spec + ui::mark::ellipsis), LP::gap(),
             LP::prose("Dialing the server's model list \xe2\x80\x94 the configured path, "
                       "then /v1/models, then Ollama's /api/tags \xe2\x80\x94 to detect what "
                       "it speaks and confirm it's alive before switching."),
@@ -291,8 +292,8 @@ LP::Config custom_host(const login::CustomHostInput& s) {
         "\xc2\xb7  inference.example.com  \xc2\xb7  https://inference.example.com/api")};
     return input_config(
         " Custom OpenAI-compatible host ", std::move(prose), std::move(t),
-        std::string{"\xe2\x86\xb5 connect \xc2\xb7 "} + back,
-        std::string{"\xe2\x86\xb5 connect \xc2\xb7 "} + back,
+        std::string{std::string{ui::mark::enter} + " connect" + ui::mark::sep} + back,
+        std::string{std::string{ui::mark::enter} + " connect" + ui::mark::sep} + back,
         std::move(footer));
 }
 
@@ -324,7 +325,7 @@ LP::Config account_list(const login::AccountList& s, maya::ScrollState* scroll,
         it.leading = r.label;
         it.active  = r.active;
         if (confirming) {
-            it.badge           = "\xe2\x9a\xa0";           // ⚠
+            it.badge           = ui::mark::warn;           // ⚠
             it.badge_style     = fg_of(danger);
             it.leading_style   = fg_bold(danger);
             it.trailing        = "press d again to confirm";
@@ -332,13 +333,13 @@ LP::Config account_list(const login::AccountList& s, maya::ScrollState* scroll,
         } else if (r.active && !active_error.empty()) {
             // The host refused this key on the last request: say so here,
             // where the user can add a working one.
-            it.badge         = "\xe2\x9a\xa0";
+            it.badge         = ui::mark::warn;
             it.badge_style   = fg_of(warn);
             it.leading_style = fg_bold(warn);
             it.trailing       = "rejected by the host";
             it.trailing_style = fg_of(warn);
         } else if (r.active) {
-            it.badge         = "\xe2\x9c\x93";             // ✓
+            it.badge         = ui::mark::ok;             // ✓
             it.badge_style   = fg_of(accent);
             it.leading_style = fg_bold(accent);
             it.trailing       = "active";
@@ -354,7 +355,7 @@ LP::Config account_list(const login::AccountList& s, maya::ScrollState* scroll,
         cfg.items.push_back(std::move(add));
     }
     cfg.note = s.confirm_remove.empty()
-                   ? "\xe2\x86\x91\xe2\x86\x93 move \xc2\xb7 \xe2\x86\xb5 select \xc2\xb7 d remove \xc2\xb7 esc close"
+                   ? std::string{ui::mark::updown} + " move" + ui::mark::sep + ui::mark::enter + " select" + ui::mark::sep + "d remove" + ui::mark::sep + "esc close"
                    : "d confirm remove \xc2\xb7 any other key cancels";
     c.panel = std::move(cfg);
     return c;
