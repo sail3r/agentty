@@ -2,6 +2,7 @@
 // this is an import and not a sixth read root.
 
 #include "agentty/mcp/import.hpp"
+#include <maya/widget/agentty/report.hpp>
 
 #include "agentty/config/inventory.hpp"
 #include "agentty/scope/scope.hpp"
@@ -347,13 +348,20 @@ void print_scan(const Scan& s) {
         return;
     }
     if (s.servers.empty()) { std::printf("  no servers\n"); return; }
+    namespace rep = maya::report;
+    std::vector<maya::Element> rows;
     for (const Found& f : s.servers) {
-        std::printf("    %-20s %s%s\n", f.name.c_str(),
-                    f.command.empty() ? f.url.c_str() : f.command.c_str(),
-                    f.conflicts ? "   (agentty already has this name)" : "");
+        rep::Table one;
+        one.indent = 4;
+        one.widths = {19};
+        one.rows.push_back({{f.name}, {(f.command.empty() ? f.url : f.command)
+                                       + (f.conflicts ? "   (agentty already has this name)" : "")}});
+        rows.push_back(one.build());
         for (const std::string& n : f.notes)
-            std::printf("      note: %s\n", n.c_str());
+            rows.push_back(rep::indent(rep::words("note: " + n), 6));
     }
+    std::fflush(stdout);
+    rep::print(rep::doc(std::move(rows)));
     // Never drop an entry silently. "3 of 5 imported" with no explanation is
     // how someone concludes the import is broken.
     if (s.skipped > 0)

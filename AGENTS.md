@@ -38,9 +38,13 @@ Details: [docs/website/building.md](docs/website/building.md).
 - agentty only fills widget Configs from the Model. Every pixel is drawn by a
   maya widget in `third_party/maya/include/maya/widget/agentty/`. No
   `Element{}`, `dsl::`, `text(`/`h(`/`v(`, `| border(` pipes or
-  `using namespace maya` anywhere under `src/` or `include/agentty/`.
+  `using namespace maya` anywhere under `src/` or `include/agentty/`, and
+  no raw `\x1b[` escapes, hand-built `StyledRun`s, or `printf` that pads
+  columns or draws marks (✓ ✗ ━ ─).
 - Need something drawn that no widget offers? Add or extend the widget in
-  maya; panel rows are `maya::Line`s, CLI output is `maya::report`.
+  maya; panel rows are `maya::Line`s, CLI output is `maya::report`
+  (`Table`, `check`, `print`), the Ctrl+G runner's tty bytes are
+  `maya::RunTranscript`.
 - `ctest -R no_ui_in_agentty` enforces it (no allowlist), and
   `ctest -R ui_snapshots` pins every screen byte-for-byte; update the
   snapshots with `tests/ui_snapshots.sh build/tool_gallery --update` only

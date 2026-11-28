@@ -451,40 +451,10 @@ Element tool_output_panel(const Model& m) {
         cache.thinking_lines = cache.thinking_cut_cp = 0;
       }
 
-        const Style hit_st = Style{}.with_fg(Color::slot(ThemeSlot::Background))
-                                    .with_bg(Color::slot(ThemeSlot::Warning)).with_bold();
         // One screen row of text: base colour, output tokens on top (when
-        // asked), then find hits on top of everything.
+        // asked), then find hits on top of everything -- maya paints them.
         auto line_row = [&](std::string_view s, Style base, bool tokens) {
-            std::vector<maya::StyledRun> runs;
-            std::vector<Style> per;
-            const auto spans = tool_output::hit_spans(s, o->query);
-            if (tokens || !spans.empty()) {
-                per.assign(s.size(), base);
-                if (tokens)
-                    for (const auto& r : maya::ToolBodyPreview::output_tokens(s)) {
-                        const auto end = std::min(s.size(), r.byte_offset + r.byte_length);
-                        for (auto k = r.byte_offset; k < end; ++k) {
-                            Style st = per[k];
-                            if (r.style.fg) st.fg = r.style.fg;
-                            st.bold = st.bold || r.style.bold;
-                            st.underline = r.style.underline;
-                            per[k] = st;
-                        }
-                    }
-                for (auto [off, len] : spans)
-                    for (auto k = off; k < std::min(s.size(), off + len); ++k) per[k] = hit_st;
-                for (std::size_t k = 0; k < per.size();) {
-                    std::size_t j = k + 1;
-                    while (j < per.size() && per[j] == per[k]) ++j;
-                    runs.push_back({k, j - k, per[k]});
-                    k = j;
-                }
-            }
-            Span out{std::string{s}, base};
-            out.fill = true;
-            out.runs = std::move(runs);
-            return out;
+            return maya::ToolViewer::output_span(s, base, tokens, tool_output::hit_spans(s, o->query));
         };
         auto note_hits = [&](std::string_view s) {
             if (!o->query.empty() && !tool_output::hit_spans(s, o->query).empty())
@@ -648,52 +618,16 @@ Element tool_output_panel(const Model& m) {
                 const Style code_st = fg_of(accent);
                 const Style mark_st = fg_dim(tool_hue);
                 const int text_w = std::max(10, pane_w - 3);
-                // `s` into plain text + one style per byte: **bold** and
-                // `code` are drawn, their delimiters dropped. A lone `**`
-                // (`docs/**`) is content and stays.
-                auto inline_md = [&](std::string_view s, Style base, std::string& plain,
-                                     std::vector<Style>& st) {
-                    for (std::size_t i = 0; i < s.size();) {
-                        if (s[i] == '`') {
-                            const auto close = s.find('`', i + 1);
-                            if (close != std::string_view::npos && close > i + 1) {
-                                for (auto k = i + 1; k < close; ++k) { plain += s[k]; st.push_back(code_st); }
-                                i = close + 1;
-                                continue;
-                            }
-                        }
-                        if (s.compare(i, 2, "**") == 0) {
-                            const auto close = s.find("**", i + 2);
-                            if (close != std::string_view::npos && close > i + 2
-                                && s[i + 2] != ' ' && s[close - 1] != ' ') {
-                                for (auto k = i + 2; k < close; ++k)
-                                    if (s[k] != '`') { plain += s[k]; st.push_back(strong); }
-                                i = close + 2;
-                                continue;
-                            }
-                        }
-                        plain += s[i++];
-                        st.push_back(base);
-                    }
-                };
-                // One source line -> wrapped rows under the rail, with a
-                // hanging indent so a bullet's continuation lines up.
-                auto emit = [&](const std::string& lead, Style lead_st,
-                                const std::string& plain, const std::vector<Style>& st, Style base) {
+                // One source line (inline markdown already resolved by
+                // maya) -> wrapped rows under the rail, with a hanging
+                // indent so a bullet's continuation lines up.
+                using Marked = maya::ToolViewer::Marked;
+                auto emit = [&](const std::string& lead, Style lead_st, const Marked& md, Style base) {
                     const int lead_w = string_width(lead);
                     bool first = true;
-                    for (auto v : wrap_rows(plain, std::max(4, text_w - lead_w))) {
-                        const auto off = static_cast<std::size_t>(v.data() - plain.data());
-                        std::vector<maya::StyledRun> runs;
-                        for (std::size_t k = 0; k < v.size();) {
-                            std::size_t j = k + 1;
-                            while (j < v.size() && st[off + j] == st[off + k]) ++j;
-                            runs.push_back({k, j - k, st[off + k]});
-                            k = j;
-                        }
-                        Span txt{std::string{v}, base};
-                        txt.fill = true;
-                        txt.runs = std::move(runs);
+                    for (auto v : wrap_rows(md.plain, std::max(4, text_w - lead_w))) {
+                        const auto off = static_cast<std::size_t>(v.data() - md.plain.data());
+                        Span txt = maya::ToolViewer::marked_span(md, off, v.size(), base);
                         cache.rows.push_back(Line::row({
                             Span{"\xe2\x94\x83 ", fg_dim(tool_hue)},   // ┃
                             Span{first ? lead : std::string(static_cast<std::size_t>(lead_w), ' '), lead_st},
@@ -728,9 +662,7 @@ Element tool_output_panel(const Model& m) {
                         in_code = !in_code;
                     } else if (in_code) {
                         flush_blank();
-                        std::string plain{ln};
-                        std::vector<Style> st(plain.size(), code_st);
-                        emit("  ", code_st, plain, st, code_st);
+                        emit("  ", code_st, Marked{std::string{ln}, std::vector<Style>(ln.size(), code_st)}, code_st);
                     } else if (t.empty()) {
                         pending_blank = true;
                     } else if (t.starts_with('|') && t.find_first_not_of("|-: ") == std::string_view::npos) {
@@ -766,13 +698,9 @@ Element tool_output_panel(const Model& m) {
                             }
                             body = table;
                         }
-                        std::string plain;
-                        std::vector<Style> st;
-                        plain.reserve(body.size());
-                        st.reserve(body.size());
-                        inline_md(body, base, plain, st);
+                        const Marked md = maya::ToolViewer::inline_markdown(body, base, strong, code_st);
                         flush_blank();
-                        emit(lead, mark_st, plain, st, base);
+                        emit(lead, mark_st, md, base);
                     }
                     if (nl == shown.size()) break;
                 }

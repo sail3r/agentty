@@ -40,6 +40,7 @@
 #include <utility>
 
 #include <maya/style/theme.hpp>
+#include <maya/widget/agentty/run_transcript.hpp>
 
 #include "agentty/runtime/panel/code_blocks.hpp"
 #include "agentty/runtime/win_shell_encode.hpp"
@@ -61,111 +62,26 @@ namespace {
 // /dev/tty directly either way. stdout+stderr are dup2'd onto a pipe the
 // parent tees: each read chunk is written straight to the tty (live
 // output) and appended to the capture buffer. Returns the finished Msg.
-// Small helpers so the transcript looks the same whether or not stdout is
-// a real terminal. Colour/heartbeat are TTY-only (piped output stays clean
-// for `agentty ... | tee`), but the command echo + status always print.
+// The run's chrome (frames, pinned status row, title, colour) is
+// maya::RunTranscript's: it returns the bytes for each moment and this file
+// only writes them. Colour honours NO_COLOR / TERM=dumb through the same
+// detector the renderer uses, so the answer is consistent across the suspend
+// boundary; off a colour tty the transcript is plain words.
 namespace runner_ui {
-    // Colour here cannot go through the theme, and that is not an oversight:
-    // maya is SUSPENDED at this point (cooked tty, TUI torn down) and we are
-    // writing bytes straight at the terminal, so there is no canvas, no
-    // style pool and no frame to paint into. These are the only hand-written
-    // escapes in agentty for exactly that reason.
-    //
-    // What they MUST still honour is whether the user wants colour at all.
-    // This used to be a bare isatty() check, which silently ignored NO_COLOR
-    // and TERM=dumb — so `NO_COLOR=1 agentty` stayed clean everywhere except
-    // here, which is the one place a user cannot theme their way out of.
-    // maya::theme::detect_tier() is the same detector the renderer uses, so
-    // the answer is consistent across the suspend boundary.
     inline bool tty() {
         static const bool on = ::isatty(STDOUT_FILENO) == 1
             && maya::theme::detect_tier(/*tty=*/true)
                    != maya::theme::ColorTier::Mono;
         return on;
     }
-    inline const char* dim()   { return tty() ? "\x1b[2m"  : ""; }
-    inline const char* bold()  { return tty() ? "\x1b[1m"  : ""; }
-    inline const char* green() { return tty() ? "\x1b[32m" : ""; }
-    inline const char* red()   { return tty() ? "\x1b[31m" : ""; }
-    inline const char* yellow(){ return tty() ? "\x1b[33m" : ""; }
-    inline const char* cyan()  { return tty() ? "\x1b[36m" : ""; }
-    inline const char* reset() { return tty() ? "\x1b[0m"  : ""; }
     inline void emit(const std::string& s) {
-        (void)!::write(STDOUT_FILENO, s.data(), s.size());
+        if (!s.empty()) (void)!::write(STDOUT_FILENO, s.data(), s.size());
     }
-    // Clear the current line (used to wipe an in-place heartbeat before
-    // real output or the final status lands on top of it).
-    inline void clear_line() { if (tty()) emit("\r\x1b[2K"); }
-    // Set / restore the terminal window title (OSC 2). This is an
-    // ALWAYS-ON elapsed-time readout that lives in the titlebar, so it
-    // updates every second even while output is streaming without ever
-    // touching the scrollback area. No-op off a TTY.
-    inline void set_title(const std::string& t) {
-        if (tty()) emit("\x1b]2;" + t + "\x07");
-    }
-    inline void restore_title() { if (tty()) emit("\x1b]2;\x07"); }
-
-    // ── Pinned bottom-line status (DECSTBM) ──────────────────────────────
-    // A universal fallback for terminals/multiplexers that drop the OSC-2
-    // window title: reserve the bottom screen row as a fixed status line so
-    // the elapsed-time readout is ALWAYS visible even while output streams.
-    // Output written by the tee loop scrolls within rows 1..h-1 (the
-    // DECSTBM margin); we repaint row h out-of-band. Every escape here is
-    // TTY-gated and fully torn down by end_status(), so piped output and
-    // the captured buffer never see any of it.
     inline int term_rows() {
         struct winsize ws{};
         if (::ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 2)
             return ws.ws_row;
-        return 0;   // unknown / too small — caller disables the status line
-    }
-    // Enter status mode: set the scroll region to rows 1..(rows-1), leaving
-    // row `rows` reserved. Cursor is parked at the top of the scroll region.
-    inline void begin_status(int rows) {
-        if (!tty() || rows < 3) return;
-        std::string s;
-        s += "\x1b[1;" + std::to_string(rows - 1) + "r";  // DECSTBM margin
-        s += "\x1b[" + std::to_string(rows - 1) + ";1H";  // park cursor
-        emit(s);
-    }
-    // Repaint the reserved bottom row with `text` (already styled), then
-    // return the cursor into the scroll region so output continues above.
-    inline void paint_status(int rows, const std::string& text) {
-        if (!tty() || rows < 3) return;
-        std::string s;
-        s += "\x1b[s";                                    // save cursor
-        s += "\x1b[" + std::to_string(rows) + ";1H";      // to status row
-        s += "\x1b[2K";                                   // clear it
-        s += text;
-        s += "\x1b[u";                                    // restore cursor
-        emit(s);
-    }
-    // Leave status mode: reset the scroll region to full screen and clear
-    // the reserved row so the transcript ends clean.
-    inline void end_status(int rows) {
-        if (!tty() || rows < 3) return;
-        std::string s;
-        s += "\x1b[r";                                    // reset DECSTBM
-        s += "\x1b[" + std::to_string(rows) + ";1H";
-        s += "\x1b[2K";
-        s += "\x1b[" + std::to_string(rows - 1) + ";1H";
-        emit(s);
-    }
-    // Hand the child a clean screen. maya's inline-mode suspend only emits
-    // "\r\n" on teardown — it moves the cursor onto a fresh line but leaves
-    // the whole last TUI frame (transcript, composer, picker) still painted
-    // ABOVE it. The run header + child output then scroll up INTO that stale
-    // frame and overlap it ("text already there that overlaps when you
-    // type"). Clear the visible viewport and home the cursor so the child
-    // starts on a blank screen.
-    //
-    // ED2 (\x1b[2J) clears the VIEWPORT only; scrollback is untouched (that
-    // needs ED3 / \x1b[3J, which we deliberately do NOT send) so the
-    // conversation history the user scrolled through stays in native
-    // scrollback. TTY-gated, so piped/captured output never sees it.
-    inline void reset_screen() {
-        if (!tty()) return;
-        emit("\x1b[2J\x1b[H");   // ED2 clear viewport + cursor home
+        return 0;   // unknown / too small: no pinned status row
     }
 }
 
@@ -173,34 +89,20 @@ namespace runner_ui {
     namespace ui = runner_ui;
     CodeBlockRunFinished fin;
     fin.command = command;
+    const maya::RunTranscript chrome{{.styled = ui::tty(), .rows = ui::term_rows()}};
 
     // Hand the child a CLEAN screen. maya's inline suspend leaves the last
     // TUI frame painted above the cursor; without this the header and child
-    // output scroll up into it and overlap. reset_screen() clears the
-    // viewport (scrollback preserved) and homes the cursor.
-    ui::reset_screen();
+    // output scroll up into it and overlap. clear() wipes the viewport
+    // (scrollback preserved) and homes the cursor.
+    ui::emit(chrome.clear());
 
     // Framed run header: a clearly-delimited banner so the user can see at
     // a glance WHERE the run started (the TUI just tore down, so a bare
     // "$ cmd" line was easy to lose) and, crucially, that Ctrl-C stops it.
     // The command still reads like a shell prompt so the transcript is
     // copy-paste-faithful.
-    {
-        std::string header;
-        header += ui::dim();
-        // No leading \n — reset_screen() already homed the cursor to row 1.
-        header += "\xe2\x95\xad\xe2\x94\x80 running \xe2\x94\x80 Ctrl-C to stop \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80";
-        header += ui::reset();
-        header += "\n";
-        header += ui::cyan();
-        header += "$ ";
-        header += ui::reset();
-        header += ui::bold();
-        header += command;
-        header += ui::reset();
-        header += "\n";
-        ui::emit(header);
-    }
+    ui::emit(chrome.header(command));
 
     // Started by jaal: no inherited descriptors, default signals in the
     // child. It stays in OUR session and keeps our stdin, because it is a
@@ -246,7 +148,6 @@ namespace runner_ui {
     const auto started = ::time(nullptr);
     long last_status_secs = -1;
     int  spin = 0;
-    static constexpr const char* kSpin[] = {"⣷","⣯","⣟","⡿","⣾","⣽","⣻","⣷"};
     // Short command label for the timers (first token, clipped).
     std::string label = command.substr(0, command.find_first_of(" \t\n"));
     if (label.size() > 24) label.resize(24);
@@ -256,21 +157,12 @@ namespace runner_ui {
     //   1. OSC-2 window title — non-intrusive, but some multiplexers drop it.
     //   2. A DECSTBM-pinned bottom status row — universal; output scrolls
     //      above it. Enabled only when we can read the terminal height.
-    const int rows = ui::term_rows();
-    ui::begin_status(rows);
+    ui::emit(chrome.begin_status());
     auto tick = [&] {
         const long secs = static_cast<long>(::time(nullptr) - started);
         if (secs == last_status_secs) return;
         last_status_secs = secs;
-        ui::set_title("● " + std::to_string(secs) + "s — " + label + " — agentty");
-        if (rows >= 3) {
-            std::string bar = ui::dim();
-            bar += kSpin[spin++ % 8];
-            bar += " running… " + std::to_string(secs) + "s · " + label
-                 + " · Ctrl-C to stop";
-            bar += ui::reset();
-            ui::paint_status(rows, bar);
-        }
+        ui::emit(chrome.tick(secs, label, spin++));
     };
     tick();
     // Exit conditions, in the order they matter:
@@ -315,8 +207,7 @@ namespace runner_ui {
             truncated = true;
         }
     }
-    ui::end_status(rows);
-    ui::restore_title();
+    ui::emit(chrome.end_status());
 
     if (!child_dead) {
         pollfd pe{exit_fd, POLLIN, 0};
@@ -344,18 +235,9 @@ namespace runner_ui {
     // interrupt is unmistakable at a glance, with elapsed time.
     {
         const long secs = static_cast<long>(::time(nullptr) - started);
-        const bool ok = (fin.exit_code == 0);
-        std::string tail = "\n";
-        if (interrupted)   { tail += ui::yellow(); tail += "╰─ ■ stopped"; }
-        else if (ok)       { tail += ui::green();  tail += "╰─ ✓ done"; }
-        else               { tail += ui::red();    tail += "╰─ ✗ failed"; }
-        tail += ui::reset();
-        tail += ui::dim();
-        tail += "  exit " + std::to_string(fin.exit_code)
-              + "  ·  " + std::to_string(secs) + "s";
-        tail += ui::reset();
-        tail += "\n";
-        ui::emit(tail);
+        using O = maya::RunTranscript::Outcome;
+        const O o = interrupted ? O::Stopped : fin.exit_code == 0 ? O::Done : O::Failed;
+        ui::emit(chrome.footer(o, fin.exit_code, secs));
     }
 
     // Keypress-to-continue: hold the transcript on screen until the user
@@ -365,10 +247,7 @@ namespace runner_ui {
     // prompt is on its own line and cleared afterward so the restored TUI
     // starts on a clean row. Any key continues.
     if (ui::tty() && ::isatty(STDIN_FILENO) == 1) {
-        std::string prompt = ui::dim();
-        prompt += "   press any key to return to agentty…";
-        prompt += ui::reset();
-        ui::emit(prompt);
+        ui::emit(chrome.continue_prompt());
         // Best-effort raw single-key read: disable canonical mode + echo
         // so a lone keypress (no Enter) continues, then restore.
         struct termios oldt{}, raw{};
@@ -386,7 +265,7 @@ namespace runner_ui {
         // tty with a human who hasn't pressed a key yet, which is its job.
         while (::read(STDIN_FILENO, &c, 1) < 0 && errno == EINTR) {}
         if (have_termios) ::tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-        ui::clear_line();
+        ui::emit(chrome.clear_line());
     }
     return fin;
 }
@@ -444,12 +323,12 @@ static void run_block_body(const maya::unlocked& cap, maya::Sink<Msg> out, std::
     // both), run the command, then a footer. All decoration is
     // console-only and never enters the captured buffer.
     const bool con = (::_isatty(_fileno(stdout)) != 0);
+    const maya::RunTranscript chrome{{.styled = con}};
     auto echo = [](const std::string& s) {
-        std::fputs(s.c_str(), stdout); std::fflush(stdout);
+        if (!s.empty()) { std::fwrite(s.data(), 1, s.size(), stdout); std::fflush(stdout); }
     };
     if (con) {
-        echo("\x1b[2m\n╭─ running ─ (output shown when it finishes) ─────\x1b[0m\n"
-             "\x1b[36m$ \x1b[0m\x1b[1m" + cmd + "\x1b[0m\n");
+        echo(chrome.captured_header(cmd));
     }
 
     std::string label = cmd.substr(0, cmd.find_first_of(" \t\n"));
@@ -493,19 +372,15 @@ static void run_block_body(const maya::unlocked& cap, maya::Sink<Msg> out, std::
                                bool con) {
             if (!con) return;
             const std::stop_callback on_stop(st, [&b] { std::stop_source(b->done).request_stop(); });
-            static constexpr const char* kSpin[] =
-                {"⣷","⣯","⣟","⡿","⣾","⣽","⣻","⣷"};
+            const maya::RunTranscript chrome{{.styled = true}};
             int spin = 0;
             const auto start = std::chrono::steady_clock::now();
             do {
                 const long secs = static_cast<long>(
                     std::chrono::duration_cast<std::chrono::seconds>(
                         std::chrono::steady_clock::now() - start).count());
-                std::string s = "\x1b]2;\u25cf " + std::to_string(secs)
-                              + "s \u2014 " + label + " \u2014 agentty\x07";
-                s += "\r\x1b[2K\x1b[2m" + std::string(kSpin[spin++ % 8])
-                   + " running\u2026 " + std::to_string(secs) + "s\x1b[0m";
-                std::fputs(s.c_str(), stdout); std::fflush(stdout);
+                const std::string s = chrome.inline_tick(secs, label, spin++);
+                std::fwrite(s.data(), 1, s.size(), stdout); std::fflush(stdout);
             } while (!maya::delay_for(hcap, b->done.get_token(), std::chrono::milliseconds(250)));
         }, beat_state, label, con);
 
@@ -544,14 +419,9 @@ static void run_block_body(const maya::unlocked& cap, maya::Sink<Msg> out, std::
     }
 
     if (con) {
-        const bool ok = (fin.exit_code == 0 && !r.timed_out);
-        std::string tail = "\r\x1b[2K\x1b]2;\x07";   // wipe hb + restore title
-        tail += ok ? "\x1b[32m╰─ ✓ done"
-             : r.timed_out ? "\x1b[33m╰─ ■ timed out"
-             : "\x1b[31m╰─ ✗ failed";
-        tail += "\x1b[0m\x1b[2m  exit " + std::to_string(fin.exit_code)
-              + "  ·  " + std::to_string(secs) + "s\x1b[0m\n";
-        echo(tail);
+        using O = maya::RunTranscript::Outcome;
+        const O o = r.timed_out ? O::TimedOut : fin.exit_code == 0 ? O::Done : O::Failed;
+        echo(chrome.end_inline() + chrome.footer(o, fin.exit_code, secs, /*fresh_line=*/false));
     }
 
     out.send(Msg{std::move(fin)});

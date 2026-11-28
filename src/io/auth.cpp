@@ -1,4 +1,5 @@
 #include <maya/core/target.hpp>
+#include <maya/widget/agentty/report.hpp>
 #include "agentty/auth/auth.hpp"
 #include "agentty/version.hpp"
 #include "agentty/util/lock_levels.hpp"
@@ -1006,6 +1007,17 @@ void open_browser(const std::string& url) {
 // Subcommands
 // ---------------------------------------------------------------------------
 
+namespace {
+// "✓ Signed in to X. Saved to <path>" then an optional next-step hint.
+void signed_in(const std::string& what, const std::string& hint) {
+    namespace rep = maya::report;
+    std::vector<maya::Element> rows{rep::blank(), rep::check(rep::Mark::Ok, what, 0)};
+    if (!hint.empty()) rows.push_back(rep::indent(rep::words(hint)));
+    std::cout << std::flush;
+    rep::print(rep::doc(std::move(rows)));
+}
+} // namespace
+
 int cmd_login(Io io, const maya::unlocked& cap) {
     // Surface what you're already signed into so switching accounts is
     // obvious — pick a different option to add/replace, `agentty logout`
@@ -1064,9 +1076,9 @@ int cmd_login(Io io, const maya::unlocked& cap) {
             std::cerr << "GitHub Copilot sign-in failed: " << r.error().render() << "\n";
             return 1;
         }
-        std::cout << "\n\xE2\x9C\x93 Signed in to GitHub Copilot. Saved to "
-                  << provider::copilot::credentials_path().string() << "\n"
-                  << "  Run agentty with `--provider copilot` to use it.\n";
+        signed_in("Signed in to GitHub Copilot. Saved to "
+                  + provider::copilot::credentials_path().string(),
+                  "Run agentty with `--provider copilot` to use it.");
         return 0;
     }
 
@@ -1099,9 +1111,9 @@ int cmd_login(Io io, const maya::unlocked& cap) {
             std::cerr << "ChatGPT sign-in succeeded but credentials could not be saved.\n";
             return 1;
         }
-        std::cout << "\n\xE2\x9C\x93 Signed in to ChatGPT. Saved to "
-                  << provider::chatgpt::codex_credentials_path().string() << "\n"
-                  << "  Run agentty with `--provider chatgpt` to use it.\n";
+        signed_in("Signed in to ChatGPT. Saved to "
+                  + provider::chatgpt::codex_credentials_path().string(),
+                  "Run agentty with `--provider chatgpt` to use it.");
         return 0;
     }
 
@@ -1196,7 +1208,7 @@ int cmd_login(Io io, const maya::unlocked& cap) {
     if (!save_credentials(io, c)) {
         std::cerr << "Failed to save credentials.\n"; return 1;
     }
-    std::cout << "\n\xE2\x9C\x93 Logged in. Saved to " << credentials_path().string() << "\n";
+    signed_in("Logged in. Saved to " + credentials_path().string(), {});
     return 0;
 }
 

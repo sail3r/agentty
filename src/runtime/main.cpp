@@ -657,6 +657,15 @@ inline maya::Element gap() { return maya::report::blank(); }
 
 } // namespace help_ui
 
+// "✓ sentence" with an optional detail line under it (a URL, a next step).
+void print_check(maya::report::Mark m, const std::string& sentence, const std::string& detail) {
+    namespace rep = maya::report;
+    std::vector<maya::Element> rows{rep::check(m, sentence, 0)};
+    if (!detail.empty()) rows.push_back(rep::indent(rep::words(detail)));
+    std::fflush(stdout);
+    rep::print(rep::doc(std::move(rows)));
+}
+
 void print_usage() {
     using namespace help_ui;
     constexpr int kCmdGutter  = 20;   // "  mcp-logout <srv>  "
@@ -1416,12 +1425,12 @@ int run_main(int argc, char** argv, const maya::unlocked& cap) {
             if (c.pending)
                 // #119: the newest release exists but this platform's binary
                 // is still building. Not "up to date", not an error -- wait.
-                std::printf("✓ up to date — v%s is out, but its %s binary is still "
-                            "building (usually under an hour). Run `agentty update` again "
-                            "later.\n  %s\n",
-                            c.latest.c_str(), update::platform_asset().c_str(), c.url.c_str());
+                print_check(maya::report::Mark::Ok,
+                            "up to date \xe2\x80\x94 v" + c.latest + " is out, but its "
+                            + update::platform_asset() + " binary is still building (usually "
+                            "under an hour). Run `agentty update` again later.", c.url);
             else
-                std::printf("✓ up to date (latest is v%s)\n", c.latest.c_str());
+                print_check(maya::report::Mark::Ok, "up to date (latest is v" + c.latest + ")", {});
             return 0;
         }
         std::printf("⬆ v%s available (you have v%s)\n  %s\n",
@@ -1452,8 +1461,8 @@ int run_main(int argc, char** argv, const maya::unlocked& cap) {
             std::fprintf(stderr, "update failed: %s\n", err.c_str());
             return 1;
         }
-        std::printf("✓ updated to v%s — restart agentty to use it\n",
-                    c.target.c_str());
+        print_check(maya::report::Mark::Ok,
+                    "updated to v" + c.target + " \xe2\x80\x94 restart agentty to use it", {});
         return 0;
     }
     if (args.subcommand == "login")  return auth::cmd_login(IoAccess::grant(), cap);

@@ -6,6 +6,7 @@
 // rather than a second opinion. See inventory.hpp for the argument.
 
 #include <maya/core/target.hpp>
+#include <maya/widget/agentty/report.hpp>
 #include "agentty/config/inventory.hpp"
 
 #include "agentty/util/home_dir.hpp"
@@ -319,16 +320,17 @@ void print_one(const Report& r) {
         std::printf("\nread, in precedence order%s\n",
                     executable(r.name) ? "  (executable — project configs are"
                                          " vouched by content hash)" : "");
+        namespace rep = maya::report;
+        rep::Table t;
         int n = 0;
-        for (const ReadRow& row : r.reads) {
-            std::printf("  %d  %-8s %-8s %s%s%s%s\n", ++n,
-                        std::string{scope::to_string(row.locus)}.c_str(),
-                        std::string{scope::dir_name(row.dialect)}.c_str(),
-                        row.path.c_str(),
-                        row.exists ? "" : "   (missing)",
-                        row.trust.empty() ? "" : "   ",
-                        row.trust.c_str());
-        }
+        for (const ReadRow& row : r.reads)
+            t.rows.push_back({{std::to_string(++n)},
+                              {std::string{scope::to_string(row.locus)}},
+                              {std::string{scope::dir_name(row.dialect)}},
+                              {row.path + (row.exists ? "" : "   (missing)")
+                                        + (row.trust.empty() ? "" : "   " + row.trust)}});
+        std::fflush(stdout);
+        rep::print(t);
         if (!r.explicit_env.empty())
             std::printf("     $%s overrides all of the above\n",
                         std::string{r.explicit_env}.c_str());
@@ -338,15 +340,23 @@ void print_one(const Report& r) {
     // .claude/mcp.json is ignored on purpose — before they file an issue.
     if (!r.skipped.empty() || !r.foreign.empty()) {
         std::printf("\nnot read\n");
+        namespace rep = maya::report;
+        rep::Table t;
         for (const SkippedDialect& s : r.skipped)
-            std::printf("  %-8s not a portable format for %s\n",
-                        s.dir.c_str(), std::string{r.name}.c_str());
+            t.rows.push_back({{s.dir}, {"not a portable format for " + std::string{r.name}}});
+        std::vector<maya::Element> rows{t.build()};
         // A foreign config gets the command that adopts it. Reading it live
         // would put the user's servers in two places with a precedence rule;
         // importing puts them in one, which is what they asked for.
-        for (const ForeignSource& f : r.foreign)
-            std::printf("  %-8s %s\n           → %s\n",
-                        f.tool.c_str(), f.path.c_str(), f.adopt_with.c_str());
+        for (const ForeignSource& f : r.foreign) {
+            rep::Table one;
+            one.widths = {7};
+            one.rows.push_back({{f.tool}, {f.path}});
+            rows.push_back(one.build());
+            rows.push_back(rep::arrow(f.adopt_with, 11));
+        }
+        std::fflush(stdout);
+        rep::print(rep::doc(std::move(rows)));
     }
 
     if (r.write) {
@@ -398,16 +408,21 @@ void print_env() {
     std::printf("  <project>/.agentty   follows the code    $AGENTTY_PROJECT_DIR%s\n",
                 env_set("AGENTTY_PROJECT_DIR") ? "  (set)" : "");
     std::printf("\neach directory can also move on its own:\n\n");
+    namespace rep = maya::report;
+    rep::Table t;
+    t.max_col = 40;
     for (const Entry& e : kEntries) {
         if (!e.write || e.write->env.empty()) continue;
         const std::string env{e.write->env};
         const char* v = std::getenv(env.c_str());
-        std::printf("  $%-26s %-12s %s\n", env.c_str(), std::string{e.name}.c_str(),
-                    v && *v ? v : "");
+        t.rows.push_back({{"$" + env}, {std::string{e.name}}, {v && *v ? v : ""}});
     }
     const char* kd = std::getenv("AGENTTY_THREADS_KEEP_DAYS");
-    std::printf("\n  $%-26s %-12s %s\n", "AGENTTY_THREADS_KEEP_DAYS", "retention",
-                kd && *kd ? kd : "(unset: threads are kept)");
+    t.rows.push_back({{""}, {""}, {""}});
+    t.rows.push_back({{"$AGENTTY_THREADS_KEEP_DAYS"}, {"retention"},
+                      {kd && *kd ? kd : "(unset: threads are kept)"}});
+    std::fflush(stdout);
+    rep::print(t);
     std::printf("\nrelative paths resolve against the root, not the current dir.\n");
     std::printf("$AGENTTY_MCP_CONFIG is not storage, it names one file to read.%s\n",
                 env_set("AGENTTY_MCP_CONFIG") ? "   (set)" : "");
@@ -592,9 +607,11 @@ int cmd_move(std::span<const std::string> argv) {
 // silently ignored. Exit 1 if anything needs fixing.
 int cmd_doctor() {
     int problems = 0, notes = 0;
-    auto bad  = [&](const std::string& s) { ++problems; std::printf("  ✗ %s\n", s.c_str()); };
-    auto note = [&](const std::string& s) { ++notes;    std::printf("  ! %s\n", s.c_str()); };
-    auto good = [](const std::string& s)  { std::printf("  ✓ %s\n", s.c_str()); };
+    namespace rep = maya::report;
+    auto say  = [](rep::Mark m, const std::string& s) { std::fflush(stdout); rep::print(rep::check(m, s)); };
+    auto bad  = [&](const std::string& s) { ++problems; say(rep::Mark::Bad,  s); };
+    auto note = [&](const std::string& s) { ++notes;    say(rep::Mark::Warn, s); };
+    auto good = [&](const std::string& s) { say(rep::Mark::Ok, s); };
 
     std::printf("storage doctor\n\n");
     for (const Entry& e : kEntries) {
@@ -660,13 +677,15 @@ int print_clean(bool apply) {
     const auto stale = find_stale();
     if (stale.empty()) { std::printf("nothing stale.\n"); return 0; }
     std::uintmax_t total = 0;
+    maya::report::Table t;
     for (const auto& s : stale) {
         bool partial = false;
         const auto b = dir_bytes(s.path, partial);
         total += b;
-        std::printf("  %-9s %s   (%s)\n", human_bytes(b).c_str(), s.path.string().c_str(), s.why);
+        t.rows.push_back({{human_bytes(b)}, {s.path.string() + "   (" + s.why + ")"}});
         if (apply) { std::error_code ec; fs::remove_all(s.path, ec); }
     }
+    maya::report::print(t);
     std::printf("\n%s %s\n", apply ? "removed" : "would remove", human_bytes(total).c_str());
     if (!apply) std::printf("run `agentty config clean --yes` to delete them.\n");
     return 0;
@@ -674,19 +693,10 @@ int print_clean(bool apply) {
 
 void print_table() {
     std::printf("where things live\n\n");
-    // Columns are padded by hand rather than with printf's %-Ns because the
-    // placeholder is an em dash: three BYTES, one COLUMN. %-6s pads to a byte
-    // count and would short the cell by two, which is exactly how a table
-    // with non-ASCII cells goes ragged.
-    auto pad = [](std::string s, std::size_t cols) {
-        std::size_t width = 0;
-        for (unsigned char c : s) if ((c & 0xC0) != 0x80) ++width;
-        if (width < cols) s.append(cols - width, ' ');
-        return s;
-    };
-    std::printf("  %s%s%s%s%s\n",
-                pad("concern", 13).c_str(), pad("what", 23).c_str(),
-                pad("reads", 7).c_str(), pad("on disk", 10).c_str(), "writes");
+    // maya's table measures DISPLAY columns, so the em-dash placeholder
+    // (three bytes, one column) still lines up.
+    maya::report::Table t;
+    t.rows.push_back({{"concern"}, {"what"}, {"reads"}, {"on disk"}, {"writes"}});
     std::uintmax_t total = 0;
     for (const Entry& e : kEntries) {
         const Report r = describe(e);
@@ -705,14 +715,11 @@ void print_table() {
         const std::string where =
             r.write ? (r.write->error.empty() ? r.write->path : "unresolved")
                     : "—";
-        std::printf("  %s%s%s%s%s\n",
-                    pad(std::string{e.name}, 13).c_str(),
-                    pad(std::string{e.what}, 23).c_str(),
-                    pad(reads, 7).c_str(), pad(size, 10).c_str(),
-                    where.c_str());
+        t.rows.push_back({{std::string{e.name}}, {std::string{e.what}}, {reads}, {size}, {where}});
     }
-    std::printf("  %s%s%s%s\n", pad("", 13).c_str(), pad("total", 23).c_str(),
-                pad("", 7).c_str(), human_bytes(total).c_str());
+    t.rows.push_back({{""}, {"total"}, {""}, {human_bytes(total)}});
+    std::fflush(stdout);
+    maya::report::print(t);
     std::printf("\n`agentty config <concern>`  details for one row\n"
                 "`agentty config env`        every override and which are set\n"
                 "`agentty config move <dir> <path>`  move a folder, safely\n"

@@ -2,6 +2,7 @@
 // progressive-disclosure rationale and the discovery-root table.
 
 #include <maya/core/target.hpp>
+#include <maya/widget/agentty/report.hpp>
 #include "agentty/util/user_root.hpp"
 #include "agentty/tool/skills.hpp"
 #include "agentty/util/sendable.hpp"
@@ -1157,8 +1158,14 @@ int cmd_skills(Io io) {
     }
     int dirty = 0;
     for (const auto& s : sk) {
-        std::printf("%-28s %-8s %s\n", s.name.c_str(), s.source.c_str(),
-                    s.dir.string().c_str());
+        {
+            maya::report::Table t;
+            t.indent  = 0;
+            t.widths  = {27, 7};
+            t.rows.push_back({{s.name}, {s.source}, {s.dir.string()}});
+            std::fflush(stdout);
+            maya::report::print(t);
+        }
         if (!s.description.empty())
             std::printf("    %s\n", s.description.c_str());
         if (!s.resources.empty())

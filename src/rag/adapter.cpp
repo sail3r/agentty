@@ -14,6 +14,7 @@
 //     mcp://<uri>            this session's MCP resources (opt-in)
 
 #include "agentty/rag/rag_adapter.hpp"
+#include <maya/widget/agentty/report.hpp>
 #include "agentty/util/callback.hpp"
 #include "agentty/rag/rag_host.hpp"
 #include "agentty/rag/vector_cache.hpp"
@@ -3034,9 +3035,12 @@ int run(const std::string& root) {
         }
 
         const std::size_t k = 10;
-        std::printf("\n  %-16s  recall@%zu   MRR    nDCG@10   ms/query\n",
-                    "stage", k);
-        std::printf("  %-16s  --------  ------  -------  --------\n", "----------------");
+        namespace rep = maya::report;
+        const maya::Style head = maya::Style{}.with_bold();
+        rep::Table ladder_t;
+        ladder_t.rows.push_back({{"stage", head}, {"recall@" + std::to_string(k), head},
+                                 {"MRR", head}, {"nDCG@10", head}, {"ms/query", head}});
+        auto num = [](double v, const char* f) { char b[32]; std::snprintf(b, sizeof b, f, v); return std::string{b}; };
         for (auto& rung : ladder) {
             Metrics m;
             auto s0 = std::chrono::steady_clock::now();
@@ -3049,9 +3053,12 @@ int run(const std::string& root) {
             double per = std::chrono::duration_cast<std::chrono::microseconds>(s1 - s0).count()
                          / 1000.0 / static_cast<double>(queries.size());
             m.finalize();
-            std::printf("  %-16s   %.3f   %.3f   %.3f     %6.2f\n",
-                        rung.name, m.recall, m.mrr, m.ndcg, per);
+            ladder_t.rows.push_back({{rung.name}, {num(m.recall, "%.3f")}, {num(m.mrr, "%.3f")},
+                                     {num(m.ndcg, "%.3f")}, {num(per, "%.2f")}});
         }
+        std::fputc('\n', stdout);
+        std::fflush(stdout);
+        rep::print(ladder_t);
         std::printf("\n  %zu known-item queries over %zu chunks. "
                     "A metric that DROPS at a rung is the stage to tune.\n",
                     queries.size(), nchunks);
@@ -3081,7 +3088,10 @@ int run(const std::string& root) {
             double per_ms = std::chrono::duration_cast<std::chrono::microseconds>(q1 - q0).count()
                             / 1000.0 / static_cast<double>(std::max<std::size_t>(sampled, 1));
             const double est_tokens = static_cast<double>(total_bytes) / 4.0;
-            std::printf("\n  ── TOKEN COST (real retrieve() output path) ──\n");
+            std::fputc('\n', stdout);
+            std::fflush(stdout);
+            maya::report::print(maya::report::indent(maya::report::framed(
+                "TOKEN COST (real retrieve() output path)", {})));
             std::printf("  queries measured : %zu (%zu returned nothing)\n", sampled, empty);
             std::printf("  passages injected: %zu total, %.2f avg/query\n",
                         total_passages,

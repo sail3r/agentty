@@ -50,44 +50,8 @@ namespace {
 
 // ── drawing ──────────────────────────────────────────────────────────────
 
-bool painted(FILE* f) {
-    return ::isatty(fileno(f)) == 1 && maya::theme::detect_tier(true) != maya::theme::ColorTier::Mono;
-}
-
-int width_of(FILE* f) {
-    int w = 80;
-    if (::isatty(fileno(f)))
-        if (const int tw = maya::detail::detect_terminal_width(); tw > 0) w = std::clamp(tw, 50, 110);
-    return w;
-}
-
-void emit(const Element& e, FILE* f = stdout) {
-    const int w = width_of(f);
-    std::string s = painted(f) ? maya::render_to_string_ansi(e, w) : maya::render_to_string(e, w);
-    // Rendered rows are padded to the width; trailing blanks only get in the
-    // way of a copy. In styled output the padding sits before closing resets.
-    constexpr std::string_view reset = maya::ansi::reset;
-    const std::string double_reset = std::string{reset} + std::string{reset};
-    std::string out;
-    for (std::size_t at = 0; at < s.size();) {
-        auto nl = s.find('\n', at);
-        std::string line{std::string_view{s}.substr(at, nl == std::string::npos ? std::string::npos : nl - at)};
-        for (;;) {
-            if (line.ends_with(' ')) line.pop_back();
-            else if (line.ends_with(reset) && (line.size() == reset.size() || line[line.size() - reset.size() - 1] == ' '
-                                               || line.ends_with(double_reset)))
-                line.resize(line.size() - reset.size());
-            else break;
-        }
-        if (painted(f) && line.find(reset.front()) != std::string::npos) line += reset;
-        out += line;
-        out += '\n';
-        if (nl == std::string::npos) break;
-        at = nl + 1;
-    }
-    while (out.ends_with("\n\n")) out.pop_back();
-    std::fputs(out.c_str(), f);
-}
+using maya::report::painted;
+void emit(const Element& e, FILE* f = stdout) { maya::report::print(e, f); }
 
 Element gap() { return maya::report::blank(); }
 Element title(std::string s) { return words(std::move(s), ui::fg_bold(ui::accent)); }

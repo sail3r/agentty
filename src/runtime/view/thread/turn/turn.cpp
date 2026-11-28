@@ -18,6 +18,7 @@
 #include <maya/widget/agentty/markdown.hpp>
 #include <maya/widget/agentty/reasoning.hpp>  // ReasoningStream (streaming reasoning block)
 #include <maya/widget/agentty/line.hpp>
+#include <maya/widget/agentty/turn_lines.hpp>
 #include "agentty/domain/ui_live.hpp"  // motion / thinking / prose-width prefs
 #include <maya/core/render_context.hpp> // available_height (resize-shrink detect)
 #include <maya/core/anim_clock.hpp>     // maya::anim_now_ms (deterministic under a test clock)
@@ -2053,18 +2054,9 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
         // scrollback) can see WHERE the prior conversation lives — the
         // model reads it on demand. Path in code-reference cyan, clipped
         // so a long absolute path can never wrap the card.
-        if (!msg.fork_transcript.empty()) {
-            std::string content;
-            std::vector<maya::StyledRun> runs;
-            auto push = [&](std::string_view part, maya::Style st) {
-                if (part.empty()) return;
-                runs.push_back(maya::StyledRun{content.size(), part.size(), st});
-                content.append(part);
-            };
-            push("prior transcript \xc2\xb7 ", maya::Style{}.with_fg(muted));
-            push(msg.fork_transcript, maya::Style{}.with_fg(code_path));
-            cfg.body.emplace_back(maya::Turn::BodySlot{maya::Line::clipped(std::move(content), std::move(runs)).build()});
-        }
+        if (!msg.fork_transcript.empty())
+            cfg.body.emplace_back(maya::Turn::BodySlot{
+                maya::ForkNote{.path = msg.fork_transcript}.build()});
         return cfg;
     }
 
@@ -2080,54 +2072,16 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
         cfg.rail_color = accent;                       // purple/accent axis
         cfg.meta       = timestamp_hh_mm(msg.timestamp);
 
-        // Complexity → status hue: complex=warn, standard=info, simple/trivial=muted.
-        auto cx_color = [&](const std::string& c) -> maya::Color {
-            if (c == "complex")  return status_warn;
-            if (c == "standard") return status_info;
-            return muted;
-        };
-
-        // Line 1: "routed → <model>  · effort <e>  · <complexity>" as one
-        // truncating node so it can never wrap.
-        {
-            std::string content;
-            std::vector<maya::StyledRun> runs;
-            auto push = [&](std::string_view part, maya::Style st) {
-                if (part.empty()) return;
-                runs.push_back(maya::StyledRun{content.size(), part.size(), st});
-                content.append(part);
-            };
-            push("\xe2\x86\x92 ", maya::Style{}.with_fg(muted));   // →
-            push(msg.smart_route_model, maya::Style{}.with_fg(code_path).with_bold());
-            push("  \xc2\xb7 effort ", maya::Style{}.with_fg(muted));
-            push(msg.smart_route_effort.empty() ? "off" : msg.smart_route_effort,
-                 maya::Style{}.with_fg(fg));
-            push("  \xc2\xb7 ", maya::Style{}.with_fg(muted));
-            push(msg.smart_route_complexity,
-                 maya::Style{}.with_fg(cx_color(msg.smart_route_complexity)));
-            if (!msg.smart_route_note.empty()) {
-                push("   ", maya::Style{});
-                push(msg.smart_route_note, maya::Style{}.with_fg(muted).with_italic());
-            }
-            cfg.body.emplace_back(maya::Turn::BodySlot{maya::Line::clipped(std::move(content), std::move(runs)).build()});
-        }
-
-        // Line 2: active layers as compact chips.
-        {
-            std::string content;
-            std::vector<maya::StyledRun> runs;
-            auto chip = [&](std::string_view label, bool on) {
-                const std::size_t s = content.size();
-                content.append(on ? "\xe2\x97\x8f " : "\xe2\x97\x8b ");  // ● / ○
-                content.append(label);
-                content.append("   ");
-                runs.push_back(maya::StyledRun{s, content.size() - s,
-                    maya::Style{}.with_fg(on ? status_ok : muted)});
-            };
-            chip("orchestrate", msg.smart_route_orchestrate);
-            chip("subagents",   msg.smart_route_subagents);
-            cfg.body.emplace_back(maya::Turn::BodySlot{maya::Line::clipped(std::move(content), std::move(runs)).build()});
-        }
+        // Line 1: "routed → <model>  · effort <e>  · <complexity>", one
+        // truncating row; line 2: the active layers as chips.
+        cfg.body.emplace_back(maya::Turn::BodySlot{maya::RouteLine{
+            .model      = msg.smart_route_model,
+            .effort     = msg.smart_route_effort,
+            .complexity = msg.smart_route_complexity,
+            .note       = msg.smart_route_note}.build()});
+        cfg.body.emplace_back(maya::Turn::BodySlot{maya::LayerChips{{
+            {"orchestrate", msg.smart_route_orchestrate},
+            {"subagents",   msg.smart_route_subagents}}}.build()});
         return cfg;
     }
 
@@ -2306,71 +2260,11 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
             // TruncateEnd makes wrapping structurally impossible — narrow
             // terminals ellipsize the tally tail while the gauge+percent
             // (emitted leftmost) always survive.
-            std::string meta;
-            std::vector<maya::StyledRun> mruns;
-            auto push = [&](std::string_view s, maya::Style st) {
-                if (s.empty()) return;
-                mruns.push_back(maya::StyledRun{meta.size(), s.size(), st});
-                meta.append(s);
-            };
-
-            // Inside the `pc` guard, so the confidence is reachable only
-            // on a message that actually has one — no sentinel compare.
-            if (pc->confidence) {
-                const double c = std::clamp(*pc->confidence, 0.0, 1.0);
-                constexpr int kCells = 8;
-                const int filled = static_cast<int>(c * kCells + 0.5);
-                // One hue = one meaning: strength maps to the status axis
-                // (green ok / yellow warn / red weak) so the gauge color
-                // itself answers "trust this grounding?" pre-attentively.
-                const char* word = c >= 0.60 ? "strong"
-                                 : c >= 0.35 ? "moderate"
-                                             : "weak";
-                const maya::Color tint = c >= 0.60 ? status_ok
-                                       : c >= 0.35 ? status_warn
-                                                   : status_error;
-                std::string filled_cells, empty_cells;
-                for (int i = 0; i < filled; ++i)      filled_cells += "\xe2\x96\xb0";
-                for (int i = filled; i < kCells; ++i) empty_cells  += "\xe2\x96\xb1";
-                const int pct = static_cast<int>(c * 100.0 + 0.5);
-                // Filled portion in the strength hue, empty in muted so the
-                // gauge reads as a true fill bar, then bold percent + dim
-                // word both tinted so the whole cluster coheres as one signal.
-                push(filled_cells, maya::Style{}.with_fg(tint));
-                push(empty_cells,  maya::Style{}.with_fg(muted));
-                push(" " + std::to_string(pct) + "%", maya::Style{}.with_fg(tint).with_bold());
-                push(std::string("\xc2\xb7") + word, maya::Style{}.with_fg(tint).with_dim());
-            }
-
-            // By-kind breakdown ("2 doc · 1 mem") answers what & how much.
-            // Counts in code-reference cyan (the quantities you scan),
-            // labels + dots dim. Abbreviate to keep the strip short; a
-            // trailing dim total ties multi-kind rows off.
-            auto short_kind = [](std::string k) -> std::string {
-                // singularize/abbrev: "memory"->"mem", "docs"->"doc", etc.
-                if (k == "memory")  return "mem";
-                if (k == "docs" || k == "doc") return "doc";
-                if (k == "skill" || k == "skills") return "skill";
-                if (k.size() > 5) k.resize(5);
-                return k;
-            };
-            if (!meta.empty())
-                push(" \xc2\xb7 ", maya::Style{}.with_fg(muted));
-            if (!kinds.empty()) {
-                for (std::size_t i = 0; i < kinds.size(); ++i) {
-                    if (i) push(" \xc2\xb7 ", maya::Style{}.with_fg(muted));
-                    push(std::to_string(kinds[i].second) + " ", maya::Style{}.with_fg(code_path));
-                    push(short_kind(kinds[i].first), maya::Style{}.with_fg(muted));
-                }
-                if (kinds.size() > 1 && n > 0)
-                    push("  (" + std::to_string(n) + ")", maya::Style{}.with_fg(muted));
-            } else {
-                const int shown_n = n > 0 ? n : 1;
-                push(std::to_string(shown_n) + " ", maya::Style{}.with_fg(code_path));
-                push(shown_n == 1 ? "passage" : "passages", maya::Style{}.with_fg(muted));
-            }
-
-            cfg.meta_element = maya::Line::clipped(std::move(meta), std::move(mruns)).build();
+            maya::RetrievalMeta rm;
+            rm.confidence = pc->confidence;
+            rm.passages   = n;
+            rm.kinds      = kinds;
+            cfg.meta_element = rm.build();
         }
 
         // Body = pure provenance, one dense line per distinct source:
@@ -2395,36 +2289,10 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
             std::vector<maya::Line> rows;
             for (std::size_t i = 0; i < sources.size() && i < kMaxSources; ++i) {
                 const Src& s = sources[i];
-                std::string kindpart = s.kind + " \xc2\xb7 ";     // "docs · "
-                std::string pathpart = s.path.empty() ? s.kind : s.path;
-                if (!s.line.empty()) pathpart += ":" + s.line;
-                // "×N" badge only when this source contributed >1 passage.
-                std::string badge = s.chunks > 1
-                    ? "  \xc3\x97" + std::to_string(s.chunks) : std::string{};
-
-                // Each provenance entry must be ONE truncating text node.
-                // A horizontal stack of individually styled fragments still
-                // asks Yoga to lay out every fragment; once the fixed prefix
-                // consumes the row, later fragments can wrap even if the
-                // final snippet has `| clip`. Combining the runs makes the
-                // width constraint structural rather than best-effort.
-                auto source_row = [&](std::string_view preview) {
-                    std::string content;
-                    std::vector<maya::StyledRun> runs;
-                    auto push = [&](std::string_view part, maya::Style style) {
-                        if (part.empty()) return;
-                        runs.push_back(maya::StyledRun{content.size(), part.size(), style});
-                        content.append(part);
-                    };
-                    push("  \xe2\x94\x94 ", maya::Style{}.with_fg(muted));
-                    push(kindpart, maya::Style{}.with_fg(muted));
-                    push(pathpart, maya::Style{}.with_fg(code_path));
-                    push(badge, maya::Style{}.with_fg(status_warn));
-                    if (!preview.empty()) {
-                        push("  ", maya::Style{}.with_fg(muted));
-                        push(preview, maya::Style{}.with_fg(muted));
-                    }
-                    return maya::Line::clipped(std::move(content), std::move(runs));
+                auto source_row = [&](std::string preview) -> maya::Line {
+                    return maya::SourceRow{.kind = s.kind, .path = s.path, .line = s.line,
+                                           .chunks = static_cast<int>(s.chunks),
+                                           .preview = std::move(preview)};
                 };
 
                 if (expanded) {

@@ -7,6 +7,7 @@
 // an at-rest-encrypted per-server token store.
 
 #include <maya/core/target.hpp>
+#include <maya/widget/agentty/report.hpp>
 #include "agentty/mcp/oauth.hpp"
 #include "agentty/version.hpp"
 #include "agentty/util/lock_levels.hpp"
@@ -666,7 +667,8 @@ int cmd_mcp_login(Io io, const std::string& server_name, const std::string& meta
     std::string cid = client_id.empty() ? client_id_of(servers, server_name) : client_id;
     LoginResult res = login(io, server_name, endpoint, metadata_url, cid);
     if (res.ok) {
-        std::fprintf(stderr, "\n\xE2\x9C\x93 %s\n", res.message.c_str());
+        std::fputc('\n', stderr);
+        maya::report::print(maya::report::check(maya::report::Mark::Ok, res.message, 0), stderr);
         return 0;
     }
     std::fprintf(stderr, "\nmcp-login failed: %s\n", res.message.c_str());
@@ -689,6 +691,7 @@ int cmd_mcp_status() {
     json servers = load_mcp_servers();
     if (servers.empty()) { std::fprintf(stderr, "no MCP servers configured\n"); return 0; }
     std::fprintf(stderr, "MCP servers:\n");
+    maya::report::Table status;
     for (auto it = servers.begin(); it != servers.end(); ++it) {
         const std::string& name = it.key();
         const auto& spec = it.value();
@@ -707,10 +710,11 @@ int cmd_mcp_status() {
             }
         }
         const char* auth = has_token(name) ? " authorized" : "";
-        std::fprintf(stderr, "  %-24s %-5s %s timeout=%dms annotations=%s pinned=%zu%s\n",
-            name.c_str(), kind, disabled ? "disabled" : "enabled", timeout,
-            trusted ? "trusted" : "untrusted", pinned, auth);
+        status.rows.push_back({{name}, {kind}, {std::string{disabled ? "disabled" : "enabled"}
+            + " timeout=" + std::to_string(timeout) + "ms annotations="
+            + (trusted ? "trusted" : "untrusted") + " pinned=" + std::to_string(pinned) + auth}});
     }
+    maya::report::print(status, stderr);
     return 0;
 }
 

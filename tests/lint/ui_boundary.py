@@ -22,12 +22,13 @@ WHAT IT ALLOWS, and why each is not a hole:
 
   * TESTS. A render test has to rasterise an Element to assert on it; that
     is reading maya's output, not bypassing it.
-  * The CLI half. `agentty paste page`, the Ctrl+G runner, `--version`: maya
-    is not running (or has handed the terminal back), so there is no layer to
-    go through. These are named individually, not waved through by directory.
   * COMMENTS AND STRINGS. The ones in turn.cpp that spell \\x1b[2J are
     describing what maya's HardReset does. Code is scanned with comments and
     literals stripped.
+
+There is no per-file allowance any more. Even where maya is not running
+(the Ctrl+G runner on the real tty, a CLI report), the bytes come from a
+maya widget (RunTranscript, report::print); agentty only writes them.
 
 Usage: ui_boundary.py <agentty source root>
 """
@@ -35,16 +36,10 @@ import re
 import sys
 from pathlib import Path
 
-# Files that legitimately emit escapes because maya is not mediating the
-# terminal at that moment. Each needs a reason, not just a path.
-ALLOW = {
-    "src/runtime/app/cmd_code_block_run.cpp":
-        "runs a user command on the real tty after maya releases it; "
-        "its progress line IS the terminal output",
-    "src/tool/util/sandbox.cpp":
-        "formats a sandbox denial for the plain-stderr path, before/outside "
-        "the TUI",
-}
+# Files that may emit escapes because maya is not mediating the terminal.
+# Empty on purpose: every such moment now has a maya widget that returns the
+# bytes (see the docstring). Adding a path here needs a reason, not a path.
+ALLOW: dict[str, str] = {}
 
 # A terminal cell is `maya::Cell`. Matching a bare `Cell{` caught agentty's
 # own unrelated Cell types -- a cache slot in gen_cache.hpp, a lazy-bytes
@@ -149,8 +144,7 @@ def main() -> None:
               file=sys.stderr)
         sys.exit(1)
 
-    print(f"ui_boundary: {scanned} files, no UI drawing in agentty "
-          f"({len(ALLOW)} allowed non-TUI emitters)")
+    print(f"ui_boundary: {scanned} files, no UI drawing in agentty")
 
 
 if __name__ == "__main__":

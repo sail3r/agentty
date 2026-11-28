@@ -4,6 +4,7 @@
 // skipped, never fatal: neither format is documented, and both change.
 
 #include "agentty/foreign/sessions.hpp"
+#include <maya/widget/agentty/report.hpp>
 
 #include "agentty/io/persistence.hpp"
 #include "agentty/util/base64.hpp"
@@ -1205,14 +1206,24 @@ int cli(Io io, const std::vector<std::string>& argv) {
         return 0;
     }
     if (dump < 0) {
+        namespace rep = maya::report;
+        const maya::Style dim = maya::Style{}.with_dim();
+        std::vector<maya::Element> rows;
         int n = 0;
         for (const auto& t : s.sessions) {
             const auto age = std::chrono::duration_cast<std::chrono::hours>(
                 Clock::now() - t.updated_at).count();
-            std::printf("%3d  %-11s %4u msgs  %5lldh ago  %s\n      %s\n", n++,
-                        display_name(t.imported->source).c_str(), t.message_count,
-                        static_cast<long long>(age), t.title.c_str(), t.workspace.c_str());
+            rep::Table one;
+            one.indent = 0;
+            one.widths = {3, 10, 9, 9};
+            one.rows.push_back({{std::to_string(n++)}, {display_name(t.imported->source)},
+                                {std::to_string(t.message_count) + " msgs"},
+                                {std::to_string(age) + "h ago"}, {t.title}});
+            rows.push_back(one.build());
+            rows.push_back(rep::indent(rep::words(t.workspace, dim), 6));
         }
+        std::fflush(stdout);
+        rep::print(rep::doc(std::move(rows)));
         if (!s.skipped.empty())
             std::printf("\n%zu other file(s) skipped (subagent or SDK runs, empty)\n",
                         s.skipped.size());
@@ -1239,10 +1250,17 @@ int cli(Io io, const std::vector<std::string>& argv) {
         if (!m.thinking.empty()) std::printf("[think %zu] ", m.thinking.size());
         if (!m.images.empty()) std::printf("[%zu img] ", m.images.size());
         std::printf("%s\n", clip(m.text, 100).c_str());
-        for (const auto& tc : m.tool_calls)
-            std::printf("     %s %-12s %s → %s\n", tc.is_failed() ? "✗" : "✓",
-                        tc.name.value.c_str(), clip(tc.args.dump(), 70).c_str(),
-                        clip(tc.output(), 50).c_str());
+        if (!m.tool_calls.empty()) {
+            namespace rep = maya::report;
+            rep::Table t;
+            t.indent = 5;
+            for (const auto& tc : m.tool_calls)
+                t.rows.push_back({rep::mark(tc.is_failed() ? rep::Mark::Bad : rep::Mark::Ok),
+                                  {tc.name.value},
+                                  {clip(tc.args.dump(), 70) + " \xe2\x86\x92 " + clip(tc.output(), 50)}});
+            std::fflush(stdout);
+            rep::print(t);
+        }
     }
     return 0;
 }

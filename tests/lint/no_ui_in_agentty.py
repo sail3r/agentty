@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""no_ui_in_agentty — agentty builds widget Configs; maya draws everything.
+r"""no_ui_in_agentty — agentty builds widget Configs; maya draws everything.
 
 The rule (docs/UI.md, AGENTS.md): no code under src/ or include/agentty may
 construct UI. Every pixel comes from a maya widget; agentty only fills a
@@ -21,6 +21,15 @@ test run on any way of building UI by hand:
                       | bgc( | grow( | shrink( | clip | width( | height( ...
   * builder headers   <maya/dsl.hpp> <maya/element/builder.hpp>
                       <maya/element/text.hpp> <maya/element/box.hpp>
+  * raw escapes       "\x1b[" / "\033[" / "\e[" / "\x1b]" in a string literal: painting
+                      the terminal by hand (colour, cursor, scroll margins)
+  * styled runs       maya::StyledRun / `.runs =` -- composing per-byte styled
+                      text is drawing; a widget takes the data and styles it
+  * CLI layout        a printf / fprintf / fputs / puts / std::cout statement
+                      whose text lays out columns (%-16s, %3d, {:<16}) or draws
+                      marks and rules (✓ ✗ ● ○ ▸ ━ ─ │ ╭ ╰): print a
+                      maya::report instead. A plain sentence or a value meant
+                      for a pipe is not layout.
 
 Comments and string literals are stripped first, so prose about the DSL is
 fine and a log message saying "text(" is not a violation.
@@ -51,6 +60,17 @@ UNQUALIFIED = (r"text|h|v|hstack|vstack|component|spacer|blank|nothing|"
 PIPES = (r"align|bcolor|bgc|border|btext|fgc|gap|grow|height|hit|justify|"
          r"margin|overflow|padding|scroll|scrollx|scrolly|shrink|visible|"
          r"width|clip")
+
+# Checked on the source with comments removed but string literals KEPT.
+ESCAPE = re.compile(r'"(?:[^"\\\n]|\\.)*(?:\\x1[bB]|\\033|\\e)[\[\]](?:[^"\\\n]|\\.)*"')
+RUNS = re.compile(r"\bStyledRun\b|\.runs\s*=(?!=)")
+OUTPUT = re.compile(r"(?<![\w:.>])(?:std::)?(?:printf|fprintf|fputs|puts)\s*\(|\bstd::(?:cout|cerr)\b")
+LAYOUT = re.compile(
+    r"%-?\d+(?:l|ll|z|h)?[sduxf]|%-\*s|\{:[<>^]\d+\}|"
+    r"[✓✗●○▸━─│╭╰╮╯┃┊]|"
+    r"\\x[eE]2\\x9[cC]\\x9[37]|\\x[eE]2\\x9[45]\\x[0-9a-fA-F]{2}|\\x[eE]2\\x97\\x8[bfBF]|"
+    r"\\x[eE]2\\x96\\x[bB]8")
+LITERAL = re.compile(r'"(?:[^"\\\n]|\\.)*"')
 
 RULES = [
     ("DSL namespace",   re.compile(r"\busing\s+namespace\s+maya\b")),
@@ -85,7 +105,7 @@ def unqualified_call(line):
     return False
 
 
-def strip(src):
+def strip(src, keep_strings=False):
     """Blank out comments and string/char literals, keeping line numbers."""
     out, i, n = [], 0, len(src)
     while i < n:
@@ -106,6 +126,13 @@ def strip(src):
             j = src.find(end, i + m.end())
             j = n if j < 0 else j + len(end)
             out.append("".join("\n" if ch == "\n" else " " for ch in src[i:j])); i = j
+        elif c in "\"'" and keep_strings:
+            j = i + 1
+            while j < n and src[j] != c:
+                if src[j] == "\\": j += 1
+                elif src[j] == "\n": break
+                j += 1
+            out.append(src[i:j + 1]); i = j + 1
         elif c in "\"'":
             # `#include "x"` keeps its path: the header rule needs it.
             line_start = src.rfind("\n", 0, i) + 1
@@ -140,6 +167,34 @@ for base in SCAN:
                     hit = "builder call"
                 if hit:
                     violations.append((os.path.relpath(p, ROOT), ln, hit, line.strip()))
+            # Same file, string literals kept: escapes, runs, CLI layout.
+            raw = strip(open(p, encoding="utf-8", errors="replace").read(), keep_strings=True)
+            lines = raw.splitlines()
+            for ln, line in enumerate(lines, 1):
+                if ESCAPE.search(line):
+                    violations.append((os.path.relpath(p, ROOT), ln, "raw escape", line.strip()))
+                elif RUNS.search(LITERAL.sub('""', line)):
+                    violations.append((os.path.relpath(p, ROOT), ln, "styled runs", line.strip()))
+            # An output statement runs from the call to its `;`; its format
+            # string is often on a later line.
+            for m in OUTPUT.finditer(raw):
+                end = m.end()
+                depth = 0
+                while end < len(raw):
+                    ch = raw[end]
+                    if ch == '"':
+                        lm = LITERAL.match(raw, end)
+                        end = lm.end() if lm else end + 1
+                        continue
+                    if ch in "([{": depth += 1
+                    elif ch in ")]}": depth -= 1
+                    elif ch == ";" and depth <= 0: break
+                    end += 1
+                stmt = raw[m.start():end]
+                if any(LAYOUT.search(s) for s in LITERAL.findall(stmt)):
+                    ln = raw.count("\n", 0, m.start()) + 1
+                    violations.append((os.path.relpath(p, ROOT), ln, "CLI layout",
+                                       lines[ln - 1].strip()))
 
 if violations:
     files = sorted({v[0] for v in violations})

@@ -9,6 +9,22 @@ All notable changes to agentty. Versions follow [SemVer](https://semver.org/).
   change of a new file in the review pane wrote its "original" back -- which
   for a new file is nothing -- so it stayed behind as an empty file. It is
   now deleted, so undo really puts the tree back the way it was.
+- **Thread loading uses every core outside the TUI too.** The thread-log
+  parser borrowed the renderer's parallel hook, which only exists inside
+  the TUI, so ACP, `agentty run` and tests parsed on one core, and the
+  save path did a blocking fork-join under the thread-log lock unchecked.
+  It now uses jaal's `parallel_for`, which is ranked like any other wait.
+
+### Changed
+- **All UI is drawn by maya.** agentty fills widget Configs and draws
+  nothing itself, now with no exceptions: the Ctrl+G runner's frames and
+  pinned status row, the coloured lines inside retrieval, fork and Smart
+  Mode cards, search hits in the output viewer, and every `config`,
+  `skills`, `plugin`, `hooks`, `sessions` and `mcp` listing come from maya
+  widgets. Output looks the same; tables now align by display width
+  everywhere, so non-ASCII cells no longer go ragged. A lint
+  (`no_ui_in_agentty`) fails the build on any raw escape, hand-built
+  styled text or `printf` column layout in agentty.
 
 ## [0.9.65] - 2026-11-27
 

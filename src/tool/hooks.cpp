@@ -15,6 +15,7 @@
 //     {path: hash} store is migrated transparently on first read.
 
 #include "agentty/tool/hooks.hpp"
+#include <maya/widget/agentty/report.hpp>
 #include "agentty/util/user_root.hpp"
 #include "agentty/config/inventory.hpp"   // kHooksApprovals — the one name
 #include "agentty/util/capped_read.hpp"   // the one capped-read primitive
@@ -755,15 +756,18 @@ int cli(Io io, const maya::unlocked& cap, const std::string& verb) {
                     is_approved(hf) ? "APPROVED"
                                     : "NOT APPROVED (hooks will not run — "
                                       "`agentty hooks approve`)");
-        auto show = [](const char* ev, const char* cc_ev, const std::vector<HookEntry>& v) {
+        maya::report::Table t;
+        auto show = [&t](const char* ev, const char* cc_ev, const std::vector<HookEntry>& v) {
             for (const auto& h : v)
-                std::printf("  %-19s match=%-20s run=%s\n", h.cc ? cc_ev : ev,
-                            h.match.empty() ? "(all)" : h.match.c_str(),
-                            h.run.c_str());
+                t.rows.push_back({{h.cc ? cc_ev : ev},
+                                  {"match=" + (h.match.empty() ? std::string{"(all)"} : h.match)},
+                                  {"run=" + h.run}});
         };
         show("pre_tool",  "PreToolUse",  hf.pre_tool);
         show("post_tool", "PostToolUse", hf.post_tool);
         show("post_tool", "PostToolUseFailure", hf.post_tool_failure);
+        std::fflush(stdout);
+        maya::report::print(t);
         return 0;
     }
     if (verb == "approve") {
@@ -787,15 +791,22 @@ int cli(Io io, const maya::unlocked& cap, const std::string& verb) {
             return 0;
         }
         // Show the exact bytes being approved, then require explicit y.
-        std::printf("── %s ──\n%s\n────────\n"
-                    "These hooks run ARBITRARY SHELL automatically on "
+        {
+            // The frame is maya's; the file goes out byte-for-byte between
+            // its rules -- this is a security prompt, nothing may wrap it.
+            const std::string body{::agentty::util::bytes_or_empty(
+                ::agentty::util::capped_read(hf.path, kMaxHooksFileBytes))};
+            std::fflush(stdout);
+            maya::report::print(maya::report::framed_open(hf.path));
+            std::fwrite(body.data(), 1, body.size(), stdout);
+            std::fputc('\n', stdout);
+            std::fflush(stdout);
+            maya::report::print(maya::report::framed_close());
+        }
+        std::printf("These hooks run ARBITRARY SHELL automatically on "
                     "matching tool calls\n(sandboxed like the bash tool, "
                     "but still able to act inside your workspace).\n"
-                    "Approve this exact file content? [y/N] ",
-                    hf.path.c_str(),
-                    std::string{::agentty::util::bytes_or_empty(
-                        ::agentty::util::capped_read(
-                            hf.path, kMaxHooksFileBytes))}.c_str());
+                    "Approve this exact file content? [y/N] ");
         std::fflush(stdout);
         std::string line;
         std::getline(std::cin, line);

@@ -36,6 +36,7 @@
 // that treated every source the same.
 
 #include <maya/core/target.hpp>
+#include <maya/widget/agentty/report.hpp>
 #include "agentty/tool/skills.hpp"
 
 #include "agentty/scope/scope.hpp"
@@ -210,7 +211,9 @@ void print_consent(const Skill& s, const std::vector<Finding>& findings) {
     if (critical) {
         // Different shape, different words, different default. A user who
         // has approved twenty skills should FEEL that this one is not those.
-        std::printf("  ━━━ REVIEW THIS ONE ━━━\n\n");
+        std::fflush(stdout);
+        maya::report::print(maya::report::alarm("REVIEW THIS ONE"));
+        std::printf("\n");
     }
 
     std::printf("  install skill \"%s\"",
@@ -227,10 +230,12 @@ void print_consent(const Skill& s, const std::vector<Finding>& findings) {
         std::printf("  declares no effects — prose only.\n");
     } else {
         std::printf("  the agent will be told it may:\n");
+        maya::report::Table t;
+        t.indent = 4;
         for (const auto& l : lines)
-            std::printf("    %-18s %s\n",
-                        std::string{l.label}.c_str(),
-                        std::string{l.gloss}.c_str());
+            t.rows.push_back({{std::string{l.label}}, {std::string{l.gloss}}});
+        std::fflush(stdout);
+        maya::report::print(t);
     }
     std::printf("\n");
 
@@ -238,15 +243,19 @@ void print_consent(const Skill& s, const std::vector<Finding>& findings) {
     // body — the skill gets no say in this section.
     if (!findings.empty()) {
         std::printf("  reading the file, agentty noticed:\n");
+        namespace rep = maya::report;
+        const maya::Style crit = maya::Style{}.with_fg(maya::Color::slot(maya::ThemeSlot::Error)).with_bold();
+        const maya::Style warn = maya::Style{}.with_fg(maya::Color::slot(maya::ThemeSlot::Warning)).with_bold();
+        rep::Table t;
+        t.indent = 3;
         for (const auto& f : findings) {
-            const char* mark = f.severity == Finding::Severity::Critical ? "!!"
-                             : f.severity == Finding::Severity::Warn     ? " !"
-                                                                         : "  ";
-            if (f.line > 0)
-                std::printf("   %s line %-4d %s\n", mark, f.line, f.detail.c_str());
-            else
-                std::printf("   %s           %s\n", mark, f.detail.c_str());
+            const rep::Cell mark = f.severity == Finding::Severity::Critical ? rep::Cell{"!!", crit}
+                                 : f.severity == Finding::Severity::Warn     ? rep::Cell{" !", warn}
+                                                                             : rep::Cell{"  "};
+            t.rows.push_back({mark, {f.line > 0 ? "line " + std::to_string(f.line) : ""}, {f.detail}});
         }
+        std::fflush(stdout);
+        rep::print(t);
         std::printf("\n");
 
         // The honest caveat. Snyk's own scanners miss things; saying
@@ -590,9 +599,14 @@ int verb_list() {
                   : std::holds_alternative<scope::Pending>(t) ? "PENDING"
                                                               : "blocked";
         }
-        std::printf("%-24s %-8s %-10s %s\n",
-                    s.name.c_str(), s.source.c_str(), trust,
-                    effects_to_frontmatter(s.effects).c_str());
+        {
+            maya::report::Table t;
+            t.indent  = 0;
+            t.widths  = {23, 7, 9};
+            t.rows.push_back({{s.name}, {s.source}, {trust}, {effects_to_frontmatter(s.effects)}});
+            std::fflush(stdout);
+            maya::report::print(t);
+        }
         if (!s.description.empty())
             std::printf("    %s\n", s.description.c_str());
         if (!s.origin.empty())

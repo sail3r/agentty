@@ -25,8 +25,23 @@ Every widget agentty renders lives in maya under
 `include/maya/widget/agentty/` (sources in `src/widget/agentty/`). Rows a
 Config takes as content — a Panel's header, footer and prebuilt rows, a
 turn's provenance line — are `maya::Line`s: styled spans as data.
-Command-line output (`--help`, `paste status`, the sandbox banner) goes
-through `maya::report`.
+Command-line output (`--help`, `paste status`, the sandbox banner, every
+`agentty config` / `skills` / `plugin` / `hooks` / `sessions` listing)
+goes through `maya::report` (`Table`, `check`, `alarm`, `framed`,
+`print`). The Ctrl+G runner, which writes to the real tty while maya is
+suspended, gets its bytes from `maya::RunTranscript`.
+
+Three quieter ways of drawing are banned too, because they pass a
+builder-only check while still deciding how things look in agentty:
+
+- **raw escapes**: no `"\x1b["` / `"\033["` / `"\x1b]"` string literal anywhere
+- **styled runs**: no `maya::StyledRun` and no `.runs =`. A line made of
+  differently coloured segments is a maya data type (`RouteLine`,
+  `RetrievalMeta`, `SourceRow`, `ToolViewer::output_span`…) that takes the
+  fields and picks the colours
+- **CLI layout**: no `printf` / `fprintf` / `fputs` / `puts` / `std::cout`
+  whose text pads columns (`%-16s`, `%3d`, `{:<16}`) or draws marks and
+  rules (`✓ ✗ ● ○ ▸ ━ ─ │ ╭ ╰`). Plain sentences and pipe output are fine
 
 **Enforced, with no allowlist:** `tests/lint/no_ui_in_agentty.py` (ctest
 `no_ui_in_agentty`) fails on any of the above. Anything that needs to

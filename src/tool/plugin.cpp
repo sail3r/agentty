@@ -1,8 +1,9 @@
-// plugin.cpp â€” the MCP plugin manager. See plugin.hpp for the contract.
+// plugin.cpp — the MCP plugin manager. See plugin.hpp for the contract.
 // The editing functions are pure JSON-file surgery (testable without a
 // terminal); cli() is the argv shell over them.
 
 #include "agentty/tool/plugin.hpp"
+#include <maya/widget/agentty/report.hpp>
 #include "agentty/util/user_root.hpp"
 
 #include "agentty/scope/scope.hpp"
@@ -40,7 +41,7 @@ namespace {
 
 // Read an entry's `disabled` flag WITHOUT throwing on a malformed value. A
 // hand-edited `"disabled": "true"` (string, not bool) makes nlohmann's
-// value("disabled", false) throw type_error.302 â€” which would crash a toggle
+// value("disabled", false) throw type_error.302 — which would crash a toggle
 // or the connect loop. Treat any non-bool as "not disabled" (fail-open: a
 // garbled flag never silently hides a server).
 [[nodiscard]] bool entry_disabled(const json& entry) noexcept {
@@ -50,7 +51,7 @@ namespace {
 }
 
 // Read + parse the file. Distinguishes "absent" (fresh empty doc, ok=true)
-// from "present but broken" (ok=false â€” never rewrite a file we couldn't
+// from "present but broken" (ok=false — never rewrite a file we couldn't
 // parse; a typo'd hand-edit must not be destroyed by `plugin add`).
 struct Loaded {
     json doc = json::object();
@@ -124,7 +125,7 @@ fs::path config_path(bool project, const fs::path& user_root) {
 }
 
 namespace {
-// Must match the bridge's kMcpApprovalsLeaf + hashing exactly â€” both sides
+// Must match the bridge's kMcpApprovalsLeaf + hashing exactly — both sides
 // read/write the SAME user-root store keyed by the SAME content hash.
 constexpr std::string_view kMcpApprovalsLeaf =
     ::agentty::config::kMcpApprovals;
@@ -154,7 +155,7 @@ bool is_project_config_trusted(Io io) {
 
 // The spawn-identity hash for one server: the command + url + args that would
 // actually run. Canonical + stable so the file side (plugin.cpp) and the live
-// side (bridge connect loop) agree. Empty command AND url â†’ empty hash.
+// side (bridge connect loop) agree. Empty command AND url → empty hash.
 std::string server_spec_hash(const std::string& command,
                              const std::string& url,
                              const std::vector<std::string>& args) {
@@ -192,11 +193,11 @@ namespace {
 }  // namespace
 
 bool is_server_trusted(Io io, const fs::path& path, const std::string& name) {
-    // Blanket grants first: the env opt-in, then a whole-file approval â€” both
+    // Blanket grants first: the env opt-in, then a whole-file approval — both
     // keep working, so nothing that trusted a config before regresses.
     if (is_project_config_trusted(io)) return true;
     const std::string h = server_hash_from_file(path, name);
-    if (h.empty()) return false;   // http/no-command server â€” not gated here
+    if (h.empty()) return false;   // http/no-command server — not gated here
     return scope::load_approvals(kMcpApprovalsLeaf).approved(h);
 }
 
@@ -481,18 +482,18 @@ namespace {
 
 int usage() {
     std::fprintf(stderr,
-        "usage: agentty plugin <verb> â€¦   (a plugin IS an MCP server entry)\n"
+        "usage: agentty plugin <verb> …   (a plugin IS an MCP server entry)\n"
         "\n"
-        "  add <name> --uvx <pypi-pkg> [extra argsâ€¦]\n"
+        "  add <name> --uvx <pypi-pkg> [extra args…]\n"
         "        Python plugin from PyPI, run via uv (auto-installs,\n"
-        "        isolated env): command = uvx <pkg> â€¦\n"
-        "  add <name> --python <script.py> [extra argsâ€¦]\n"
-        "        Local Python script: command = python3 <script> â€¦\n"
-        "  add <name> --npx <npm-pkg> [extra argsâ€¦]\n"
-        "        Node plugin from npm: command = npx -y <pkg> â€¦\n"
+        "        isolated env): command = uvx <pkg> …\n"
+        "  add <name> --python <script.py> [extra args…]\n"
+        "        Local Python script: command = python3 <script> …\n"
+        "  add <name> --npx <npm-pkg> [extra args…]\n"
+        "        Node plugin from npm: command = npx -y <pkg> …\n"
         "  add <name> --http <url>   (or --sse <url>)\n"
-        "        Remote server over HTTP/SSE â€” a url, no local command.\n"
-        "  add <name> -- <command> [argsâ€¦]\n"
+        "        Remote server over HTTP/SSE — a url, no local command.\n"
+        "  add <name> -- <command> [args…]\n"
         "        Anything else, verbatim argv.\n"
         "\n"
         "  options for add: --project (write ./.agentty/mcp.json instead of\n"
@@ -533,6 +534,8 @@ int cli(Io io, const maya::unlocked& cap, const std::vector<std::string>& argv) 
             return 0;
         }
         std::printf("%s:\n", path.string().c_str());
+        namespace rep = maya::report;
+        rep::Table t;
         for (const auto& s : servers) {
             // Show the command line for stdio servers, or the url for HTTP/SSE
             // servers (which have no command) so the row isn't blank.
@@ -540,17 +543,27 @@ int cli(Io io, const maya::unlocked& cap, const std::vector<std::string>& argv) 
             for (const auto& a : s.args) detail += " " + a;
             if (detail.empty() && !s.url.empty()) detail = s.url;
             // For a project config, show whether each server is trusted to
-            // connect (âœ“) or is gated pending approval (â€”). User configs are
+            // connect (✓) or is gated pending approval (—). User configs are
             // always trusted, so no marker there. HTTP/SSE (url, no command)
             // servers spawn nothing and aren't gated, so no mark either.
-            const char* mark = "";
-            if (project && !s.command.empty())
-                mark = is_server_trusted(io, path, s.name) ? "\u2713 " : "\u2014 ";
-            std::printf("  %s%-16s %s\n", mark, s.name.c_str(), detail.c_str());
+            if (project) {
+                const rep::Cell mark = s.command.empty() ? rep::Cell{" "}
+                    : is_server_trusted(io, path, s.name) ? rep::mark(rep::Mark::Ok)
+                                                          : rep::Cell{"\xe2\x80\x94"};   // —
+                t.rows.push_back({mark, {s.name}, {detail}});
+            } else {
+                t.rows.push_back({{s.name}, {detail}});
+            }
         }
-        if (project)
-            std::printf("\n\u2713 trusted Â· \u2014 pending approval "
-                        "(agentty plugin approve <name> --project)\n");
+        std::fflush(stdout);
+        rep::print(t);
+        if (project) {
+            std::fputc('\n', stdout);
+            std::fflush(stdout);
+            rep::print(rep::line({rep::words(rep::mark(rep::Mark::Ok).text, rep::mark(rep::Mark::Ok).style),
+                                  rep::words("trusted \xc2\xb7 \xe2\x80\x94 pending approval "
+                                             "(agentty plugin approve <name> --project)")}));
+        }
         return 0;
     }
 
@@ -570,7 +583,7 @@ int cli(Io io, const maya::unlocked& cap, const std::vector<std::string>& argv) 
             return 0;
         }
         if (approve_server(io, cap, path, rest[0])) {
-            std::printf("approved %s â€” restart agentty to connect it\n",
+            std::printf("approved %s — restart agentty to connect it\n",
                         rest[0].c_str());
             return 0;
         }
@@ -592,7 +605,7 @@ int cli(Io io, const maya::unlocked& cap, const std::vector<std::string>& argv) 
                          rest[0].c_str(), path.string().c_str());
             return 1;
         case EditResult::ParseError:
-            std::fprintf(stderr, "%s is not valid JSON â€” fix it by hand "
+            std::fprintf(stderr, "%s is not valid JSON — fix it by hand "
                          "first (refusing to rewrite a broken file)\n",
                          path.string().c_str());
             return 1;
@@ -645,7 +658,7 @@ int cli(Io io, const maya::unlocked& cap, const std::vector<std::string>& argv) 
             spec.command = "python3";
             // Absolutise the script path: agentty's cwd at connect time is
             // whatever directory the user launches from, not where they ran
-            // `plugin add` â€” a relative path would break silently.
+            // `plugin add` — a relative path would break silently.
             std::error_code ec;
             fs::path script = fs::absolute(tail[0], ec);
             if (!ec) tail[0] = script.string();
@@ -656,7 +669,7 @@ int cli(Io io, const maya::unlocked& cap, const std::vector<std::string>& argv) 
             spec.args.push_back("-y");
             for (auto& t : tail) spec.args.push_back(std::move(t));
         } else if (recipe == "--http" || recipe == "--sse") {
-            // Remote transport â€” a url, no local command (so not trust-gated).
+            // Remote transport — a url, no local command (so not trust-gated).
             if (tail.empty()) return usage();
             if (tail[0].rfind("http://", 0) != 0 && tail[0].rfind("https://", 0) != 0) {
                 std::fprintf(stderr, "url must start with http:// or https://\n");
@@ -679,15 +692,21 @@ int cli(Io io, const maya::unlocked& cap, const std::vector<std::string>& argv) 
                        for (const auto& a : spec.args) c += " " + a;
                        return c; }()
                 : spec.url;
-            std::printf("added %-16s %s\n  â†’ %s\n", spec.name.c_str(),
-                        detail.c_str(), path.string().c_str());
+            {
+                namespace rep = maya::report;
+                rep::Table t;
+                t.indent = 0;
+                t.rows.push_back({{"added"}, {spec.name}, {detail}});
+                std::fflush(stdout);
+                rep::print(rep::doc({t.build(), rep::arrow(path.string(), 2)}));
+            }
             std::printf("restart agentty to connect (tools appear as "
                         "mcp__%s__<tool>)\n", spec.name.c_str());
             // A url server spawns no local command, so it's never trust-gated;
             // only stdio project servers need approval.
             if (project && spec.url.empty())
                 std::printf("note: project servers are untrusted until"
-                            " approved â€” run\n      agentty plugin approve %s"
+                            " approved — run\n      agentty plugin approve %s"
                             " --project\n", spec.name.c_str());
             return 0;
         }
@@ -697,7 +716,7 @@ int cli(Io io, const maya::unlocked& cap, const std::vector<std::string>& argv) 
                          spec.name.c_str(), path.string().c_str());
             return 1;
         case EditResult::ParseError:
-            std::fprintf(stderr, "%s is not valid JSON â€” fix it by hand "
+            std::fprintf(stderr, "%s is not valid JSON — fix it by hand "
                          "first (refusing to rewrite a broken file)\n",
                          path.string().c_str());
             return 1;
