@@ -18,6 +18,7 @@
 #include "agentty/runtime/view/form_panel.hpp"
 #include "agentty/runtime/panel/appearance.hpp"
 #include "agentty/runtime/view/look.hpp"
+#include <maya/widget/agentty/rows.hpp>
 
 namespace agentty::ui {
 
@@ -54,10 +55,10 @@ namespace {
     cfg.selected = win.cursor;
 
     cfg.header.push_back(filter_header(pick.query()));
-    cfg.header.push_back(maya::Line::rule());
+    cfg.header.push_back(ui::pane::Rule{});
 
     if (visible.empty()) {
-        cfg.prebuilt.push_back(maya::Line{"  no scheme matches", fg_italic(muted)});
+        cfg.prebuilt.push_back(ui::pane::Empty{"no scheme matches"});
     } else {
         cfg.items.reserve(visible.size());
         for (const std::string* name_p : visible) {
@@ -99,8 +100,8 @@ namespace {
         }
     }
 
-    cfg.footer.push_back(maya::Line::rule());
-    cfg.footer.push_back(maya::Line{"  Moving applies it \xe2\x80\x94 you are looking at the preview.", fg_dim(muted)});
+    cfg.footer.push_back(ui::pane::Rule{});
+    cfg.footer.push_back(ui::pane::Help{"Moving applies it \xe2\x80\x94 you are looking at the preview."});
     cfg.footer.push_back(key_hints({
         {ui::mark::updown, "preview", 5},   // ↑↓
         {"Enter", "keep", 3},

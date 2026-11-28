@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <string>
 #include "agentty/runtime/view/look.hpp"
+#include <maya/widget/agentty/rows.hpp>
 
 namespace pn = agentty::ui::panel;
 
@@ -126,19 +127,9 @@ Element settings_list_panel(const Model& m) {
         // AT o->cursor (←/→ work mid-string), and a long pasted command
         // line windows under it (‹/› markers) instead of walking off the
         // right edge — same machinery as every panel text field.
-        cfg.header.push_back(maya::Line{{"  "}, {add_prompt(o->concern), fg_dim(muted)}});
-        std::size_t at = std::string::npos;
-        const std::string shown = maya::panel::detail::with_caret(
-            o->input, static_cast<std::size_t>(std::max(0, o->cursor)),
-            panel_detail::panel_terminal_cols() - 12, &at);
-        // Same caret as every panel field: the terminal's blinking block
-        // cursor on a blank cell, coloured via OSC 12.
-        const auto caret = ui::tone::caret(highlight);
-        cfg.header.push_back(Line{
-            {std::string{"  "} + ui::mark::edit + "  ", fg_of(highlight)},         // ✎ pencil
-            {shown.substr(0, at), fg_bold(fg)},
-            {shown.substr(at, 3), caret},
-            {shown.substr(at + 3), fg_bold(fg)}});
+        cfg.header.push_back(ui::pane::Note{add_prompt(o->concern)});
+        cfg.header.push_back(ui::pane::Field{.text = o->input, .cursor = o->cursor,
+                                         .width = panel_detail::panel_terminal_cols() - 12});
     } else if (o->concern == se::Category::General) {
         // The hub searches every setting: the filter line is the header.
         cfg.header.push_back(filter_header(o->query, "every setting", highlight));
@@ -176,8 +167,8 @@ Element settings_list_panel(const Model& m) {
         if (pm.cap.deferred > 0)
             line2 += ui::mark::sep + std::to_string(pm.cap.deferred)
                    + " deferred (addressable by name)";
-        cfg.header.push_back(maya::Line{{"  "}, {line1, fg_bold(fg)}});
-        cfg.header.push_back(maya::Line{{"  "}, {line2, fg_dim(muted)}});
+        cfg.header.push_back(ui::pane::Lede{line1});
+        cfg.header.push_back(ui::pane::Note{line2});
         // Enabled but not on the wire, in two sentences because there are two
         // reasons: the cap (the user can fix it by pinning) and a schema the
         // request would fail on (only the server can fix it).
@@ -191,18 +182,18 @@ Element settings_list_panel(const Model& m) {
                 left += std::to_string(pm.cap.skipped_by_schema)
                       + " left out by an invalid schema";
             }
-            cfg.header.push_back(maya::Line{{"  "}, {left, fg_of(warn)}});
+            cfg.header.push_back(ui::pane::Note{.text = left, .warn = true});
         }
     } else {
-        cfg.header.push_back(maya::Line{{"  "}, {se::subtitle(o->concern), fg_dim(muted)}});
+        cfg.header.push_back(ui::pane::Note{se::subtitle(o->concern)});
     }
-    cfg.header.push_back(maya::Line::blank());
+    cfg.header.push_back(ui::pane::Gap{});
 
     // ── Search results (hub with a query) ─────────────────────────────
     if (se::is_search(*o)) {
         const auto hits = se::search(o->index_rows, o->query);
         if (hits.empty()) {
-            cfg.prebuilt.push_back(maya::Line{"  no setting matches \"" + o->query + "\"", fg_italic(muted)});
+            cfg.prebuilt.push_back(ui::pane::Empty{"no setting matches \"" + o->query + "\""});
         }
         for (int k = 0; k < static_cast<int>(hits.size()); ++k) {
             const auto& hit = o->index_rows[static_cast<std::size_t>(hits[static_cast<std::size_t>(k)])];
@@ -229,10 +220,10 @@ Element settings_list_panel(const Model& m) {
             cfg.items.push_back(std::move(row));
         }
         cfg.selected = hits.empty() ? -1 : o->index;
-        cfg.footer.push_back(maya::Line::blank());
+        cfg.footer.push_back(ui::pane::Gap{});
         if (!hits.empty())
-            cfg.footer.push_back(maya::Line{"  " + std::to_string(o->index + 1) + "/" + std::to_string(hits.size())
-                    + " settings", fg_dim(muted)});
+            cfg.footer.push_back(ui::pane::Position{.at = o->index, .of = static_cast<int>(hits.size()),
+                                                .noun = "settings"});
         cfg.footer.push_back(key_hints({{ui::mark::updown, "move", 5},
                                         {ui::mark::enter, "open", 5},
                                         {"esc", "clear", 5}}));
@@ -329,13 +320,13 @@ Element settings_list_panel(const Model& m) {
     } else if (!o->confirm_remove.empty()) {
         cfg.note = "d confirm remove \xc2\xb7 any other key cancels";
     } else {
-        cfg.footer.push_back(maya::Line::blank());
+        cfg.footer.push_back(ui::pane::Gap{});
         // Action hint for the focused row, then keys (+ `a add`).
         std::string act_hint;
         if (o->index >= 0 && o->index < static_cast<int>(rows.size()))
             act_hint = rows[static_cast<std::size_t>(o->index)].hint;
         if (!act_hint.empty())
-            cfg.footer.push_back(maya::Line{{std::string{"  "} + ui::mark::enter + " ", fg_of(highlight)}, {act_hint, fg_of(fg)}});
+            cfg.footer.push_back(ui::pane::KeyAction{.key = ui::mark::enter, .action = act_hint, .prominent = true});
 
         // The shared key_hints idiom (hints.hpp), not hand-built runs —
         // every other picker's footer goes through it, and the drift this

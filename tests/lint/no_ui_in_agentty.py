@@ -83,6 +83,9 @@ TYPOGRAPHY = set("\u00b7\u00d7\u2013\u2014\u2018\u2019\u201c\u201d\u2026\u2212\u
 GLYPH_PROTOCOL = {"src/runtime/view/thread/turn/agent_timeline/task_body.cpp",
                   "src/runtime/view/thread/turn/agent_timeline/tool_body_common.cpp"}
 VIEW = ("src/runtime/view/", "include/agentty/runtime/view/")
+# Building a row by hand: the row kinds live in maya::rows.
+HAND_ROW = re.compile(r"\b(?:maya::)?Line\s*(?:\{|::(?:row|rule|blank|clipped|hanging|stack)\s*\()"
+                      r"|\b(?:maya::)?Span\s*\{|\b(?:maya::)?Span\s+\w+\s*\{")
 
 
 def decode(lit):
@@ -206,6 +209,9 @@ for base in SCAN:
                       and not line.lstrip().startswith("#")
                       and any(has_icon(l[1:-1]) for l in LITERAL.findall(line))):
                     violations.append((os.path.relpath(p, ROOT), ln, "icon glyph", line.strip()))
+                elif (os.path.relpath(p, ROOT).startswith(VIEW)
+                      and HAND_ROW.search(LITERAL.sub('""', line))):
+                    violations.append((os.path.relpath(p, ROOT), ln, "hand-built row", line.strip()))
             # An output statement runs from the call to its `;`; its format
             # string is often on a later line.
             for m in OUTPUT.finditer(raw):

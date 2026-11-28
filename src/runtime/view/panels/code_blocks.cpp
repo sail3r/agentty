@@ -5,6 +5,7 @@
 
 #include "panels_prologue.hpp"
 #include "agentty/runtime/view/look.hpp"
+#include <maya/widget/agentty/rows.hpp>
 
 namespace agentty::ui {
 
@@ -83,7 +84,7 @@ Element code_blocks_panel(const Model& m) {
         cfg.items.push_back(std::move(row));
     }
 
-    cfg.footer.push_back(maya::Line::blank());
+    cfg.footer.push_back(ui::pane::Gap{});
     cfg.footer.push_back(key_hints({
         {ui::mark::updown, "move", 5},        // ↑↓
         {"Enter/1-9", "run", 3},
@@ -121,7 +122,7 @@ Element code_block_result_panel(const Model& m) {
             cmd_line.resize(eol);
             cmd_line += std::string{" "} + ui::mark::ellipsis;   // …
         }
-        cfg.header.push_back(maya::Line{{"$ ", fg_bold(cfg.accent)}, {std::move(cmd_line), fg_of(fg)}});
+        cfg.header.push_back(ui::pane::Command{.command = std::move(cmd_line), .accent = cfg.accent});
         std::size_t lines = r->output.empty() ? 0 : 1;
         for (char c : r->output) if (c == '\n') ++lines;
         std::string status = r->timed_out
@@ -131,8 +132,10 @@ Element code_block_result_panel(const Model& m) {
         status += (r->output.size() >= 1024)
             ? std::to_string(r->output.size() / 1024) + " KB"
             : std::to_string(r->output.size()) + " B";
-        cfg.header.push_back(maya::Line{"  " + status, ok_exit ? fg_of(muted) : fg_bold(danger)});
-        cfg.header.push_back(maya::Line::rule());
+        cfg.header.push_back(ui::pane::Status{.text = status,
+                                          .kind = ok_exit ? ui::pane::Status::Kind::Quiet : ui::pane::Status::Kind::Error,
+                                          .loud = true});
+        cfg.header.push_back(ui::pane::Rule{});
     }
 
     // Full capture, line-numbered like the tool output viewer: a right-
@@ -166,10 +169,8 @@ Element code_block_result_panel(const Model& m) {
 
         std::string_view out{r->output};
         if (out.empty()) {
-            cache.rows.push_back(
-                Line::row({Span{"  (no output captured)", fg_italic(muted)}}));
+            cache.rows.push_back(ui::pane::Placeholder{"(no output captured)"});
         } else {
-            const Color pipe_hue = ok_exit ? muted : danger;
             std::vector<std::string_view> lines;
             {
                 std::size_t pos = 0;
@@ -185,17 +186,9 @@ Element code_block_result_panel(const Model& m) {
             const int gutter_w = static_cast<int>(
                 std::to_string(std::max<std::size_t>(1, lines.size())).size());
             cache.rows.reserve(lines.size());
-            for (std::size_t i = 0; i < lines.size(); ++i) {
-                std::string num = std::to_string(i + 1);
-                if (static_cast<int>(num.size()) < gutter_w)
-                    num.insert(0, gutter_w - num.size(), ' ');
-                Span body{std::string{lines[i]}, ok_exit ? fg_of(muted) : fg_of(fg)};
-                body.fill = true;
-                cache.rows.push_back(Line::row({
-                    Span{"  " + num + " ", fg_dim(warn)},
-                    Span{std::string{ui::mark::rail_thin} + " ", fg_dim(pipe_hue)},   // │
-                    std::move(body)}));
-            }
+            for (std::size_t i = 0; i < lines.size(); ++i)
+                cache.rows.push_back(ui::pane::CaptureLine{.number = static_cast<int>(i + 1), .gutter = gutter_w,
+                                                       .text = std::string{lines[i]}, .ok = ok_exit});
         }
     }
 
@@ -212,14 +205,12 @@ Element code_block_result_panel(const Model& m) {
     for (int i = first; i < last; ++i)
         cfg.prebuilt.push_back(cache.rows[static_cast<std::size_t>(i)]);
 
-    cfg.footer.push_back(maya::Line::blank());
+    cfg.footer.push_back(ui::pane::Gap{});
     // Scroll-position readout: which lines of the capture are on screen —
     // the manual window has no scrollbar, so this is the affordance that
     // there is more output above/below (same grammar as the tool viewer).
     if (total_rows > vh) {
-        cfg.footer.push_back(maya::Line{"  " + std::to_string(first + 1) + ui::mark::range   // –
-                 + std::to_string(last) + " / "
-                 + std::to_string(total_rows) + " lines", fg_dim(muted)});
+        cfg.footer.push_back(ui::pane::Window{.first = first, .last = last, .total = total_rows});
     }
     cfg.footer.push_back(key_hints({
         {"a", "attach to composer", 6},

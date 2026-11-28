@@ -301,12 +301,8 @@ maya::Composer::Config composer_config(const Model& m) {
     // While the `/` menu is open its keys take the slot, so you can see
     // how to complete, run and dismiss without guessing.
     if (slash_menu_open(m)) {
-        const auto k = ui::tone::hint_key();
-        const auto l = ui::tone::hint_label();
-        cfg.status = maya::Line{{ui::mark::tab, k}, {" complete  ", l},     // ↹
-                                {ui::mark::enter, k}, {" run  ", l},          // ↵
-                                {ui::mark::updown, k}, {" pick  ", l}, // ↑↓
-                                {"esc", k}, {" hide", l}};
+        cfg.status = ui::pane::Keys{{{ui::mark::tab, "complete"}, {ui::mark::enter, "run"},
+                                     {ui::mark::updown, "pick"}, {"esc", "hide"}}}.line();
     }
     // TYPING MID-TURN: say what Enter will actually do.
     //

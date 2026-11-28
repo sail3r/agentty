@@ -2248,13 +2248,13 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
             // makes maya see a single block → the rows sit flush against each
             // other, and the one inter-slot gap only separates this whole
             // provenance block from the meta/affordance around it.
-            std::vector<maya::Line> rows;
+            ui::pane::Stack rows;
             for (std::size_t i = 0; i < sources.size() && i < kMaxSources; ++i) {
                 const Src& s = sources[i];
-                auto source_row = [&](std::string preview) -> maya::Line {
+                auto source_row = [&](std::string preview) {
                     return maya::SourceRow{.kind = s.kind, .path = s.path, .line = s.line,
                                            .chunks = static_cast<int>(s.chunks),
-                                           .preview = std::move(preview)};
+                                           .preview = std::move(preview)}.line_of();
                 };
 
                 if (expanded) {
@@ -2264,25 +2264,21 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
                     // retrieval card (and following turns) onto extra rows.
                     std::string quoted = s.full.empty() ? std::string{}
                         : std::string{" "} + ui::mark::lquote + s.full + ui::mark::rquote;
-                    rows.push_back(source_row(quoted));
+                    rows.lines.push_back(source_row(quoted));
                 } else if (!s.snippet.empty()) {
                     // Keep quotation marks in the same truncating node: no
                     // dangling close quote and, critically, no second line.
-                    rows.push_back(source_row(
+                    rows.lines.push_back(source_row(
                         ui::mark::lquote + s.snippet + ui::mark::rquote));
                 } else {
-                    rows.push_back(source_row({}));
+                    rows.lines.push_back(source_row({}));
                 }
             }
             if (total > kMaxSources) {
-                rows.push_back(maya::Line::clipped(std::string{"  "} + ui::mark::ellipsis + " " + std::to_string(total - kMaxSources)
-                             + " more source"
-                             + (total - kMaxSources == 1 ? "" : "s"), {}, fg_of(muted)));
+                rows.lines.push_back(ui::pane::More{.count = static_cast<int>(total - kMaxSources), .noun = "source"});
             }
-            if (!rows.empty()) {
-                cfg.body.emplace_back(maya::Turn::BodySlot{
-                    maya::Line::stack(std::move(rows))});
-            }
+            if (!rows.lines.empty())
+                cfg.body.emplace_back(maya::Turn::BodySlot{static_cast<maya::Element>(rows)});
             // Affordance footer — only when there's a full body worth
             // expanding to. Tells the user the toggle exists and what it
             // does; dim so it never competes with the citation content.
@@ -2291,11 +2287,8 @@ maya::Turn::Config turn_config(const Message& msg, std::size_t msg_idx,
             const bool any_full = std::any_of(sources.begin(), sources.end(),
                 [](const Src& s){ return !s.full.empty(); });
             if (any_full) {
-                const std::string affordance = expanded
-                    ? "  ^U collapse"
-                    : "  ^U expand full passages";
-                cfg.body.emplace_back(maya::Turn::BodySlot{
-                    maya::Line::clipped(affordance, {}, fg_of(status_info)).build()});
+                cfg.body.emplace_back(maya::Turn::BodySlot{static_cast<maya::Element>(ui::pane::Affordance{
+                    .key = "^U", .action = expanded ? "collapse" : "expand full passages"})});
             }
         }
         return cfg;

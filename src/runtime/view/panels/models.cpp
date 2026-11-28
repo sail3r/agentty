@@ -5,6 +5,7 @@
 
 #include "panels_prologue.hpp"
 #include "agentty/runtime/view/look.hpp"
+#include <maya/widget/agentty/rows.hpp>
 
 namespace agentty::ui {
 
@@ -17,7 +18,7 @@ namespace agentty::ui {
 // switches provider+model atomically; a dim "sign in to X" row routes to login.
 Element models_panel(const Model& m) {
     auto* picker = m.ui.panel.get<pn::Models>();
-    if (!picker) return Line::blank();
+    if (!picker) return ui::pane::Gap{};
 
     // Read the reducer-maintained cache — never rebuild per frame.
     const auto& rows = m.d.fused_rows;
@@ -62,7 +63,7 @@ Element models_panel(const Model& m) {
                           ? "this provider"
                           : "across providers",
                       accent));
-    cfg.header.push_back(maya::Line::rule());
+    cfg.header.push_back(ui::pane::Rule{});
 
     // Lazy-load hint: while any provider's catalog is still streaming in,
     // show a dim spinner-ish note so the (initially active-provider-only)
@@ -99,8 +100,8 @@ Element models_panel(const Model& m) {
             }
             if (pending.size() > shown)
                 who += " +" + std::to_string(pending.size() - shown);
-            cfg.header.push_back(maya::Line{"  " + std::string{m.s.spinner.current_frame()}
-                    + " loading " + who + ui::mark::ellipsis, fg_italic(muted)});
+            cfg.header.push_back(ui::pane::Pending{.text = "loading " + who,
+                                               .spinner = std::string{m.s.spinner.current_frame()}});
         }
         // One line per failed provider with the server's own reason, so a
         // rejected key reads as that and not as "this host has no models".
@@ -108,13 +109,13 @@ Element models_panel(const Model& m) {
             const auto& c = *failed[i];
             const std::string why = c.error.empty()
                 ? std::string{"couldn't load models"} : c.error;
-            cfg.header.push_back(maya::Line{std::string{"  "} + ui::mark::warn + " " + c.label + ui::mark::sep + why, fg_of(warn)});
+            cfg.header.push_back(ui::pane::Warning{.text = c.label + ui::mark::sep + why});
         }
         if (failed.size() > 3)
-            cfg.header.push_back(maya::Line{std::string{"  "} + ui::mark::warn + " +" + std::to_string(failed.size() - 3)
-                    + " more failed \xc2\xb7 ^L to retry", fg_of(warn)});
+            cfg.header.push_back(ui::pane::Warning{.text = "+" + std::to_string(failed.size() - 3)
+                                               + " more failed \xc2\xb7 ^L to retry"});
         else if (!failed.empty())
-            cfg.header.push_back(maya::Line{"    ^L retry \xc2\xb7 ^P fix the key or address", fg_dim(muted)});
+            cfg.header.push_back(ui::pane::Remedy{"^L retry \xc2\xb7 ^P fix the key or address"});
     }
 
     if (rows.empty()) {

@@ -17,6 +17,7 @@
 
 #include <string>
 #include "agentty/runtime/view/look.hpp"
+#include <maya/widget/agentty/rows.hpp>
 
 namespace pn = agentty::ui::panel;
 
@@ -72,9 +73,9 @@ Element fork_panel(const Model& m) {
         cfg.items.push_back(std::move(row));
     }
 
-    cfg.footer.push_back(maya::Line::blank());
-    cfg.footer.push_back(maya::Line{"  A fork starts FRESH (near-zero context) · the old transcript is "
-        "readable on demand.", fg_dim(muted)});
+    cfg.footer.push_back(ui::pane::Gap{});
+    cfg.footer.push_back(ui::pane::Help{"A fork starts FRESH (near-zero context) · the old transcript is "
+        "readable on demand."});
     // The shared key_hints idiom, not a hand-built run: this one spelled its
     // own spacing and could not shed keys under width pressure, so on a
     // narrow pane it overflowed instead of dropping the least important hint

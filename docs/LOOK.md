@@ -17,9 +17,33 @@ edited, rebuilt against new names, or reviewed.
 
 | Layer | File | agentty says | The folder decides |
 |-------|------|--------------|--------------------|
-| structure | one widget per surface (`turn.hpp`, `panel.hpp`, `status_bar.hpp`, `report.hpp`, `run_transcript.hpp`, …) | *what* is on screen: a turn with these tool calls, a panel with these rows | layout, borders, spacing, truncation, every glyph the widget draws itself |
+| screen | `app_layout.hpp` | the parts: a thread, a composer, a status bar, an overlay | their order, nesting, padding, where an overlay floats |
+| structure | one widget per surface (`turn.hpp`, `panel.hpp`, `status_bar.hpp`, `report.hpp`, `run_transcript.hpp`, …) | *what* is on screen: a turn with these tool calls, a panel with these items | layout, borders, spacing, truncation, every glyph the widget draws itself |
+| rows | `rows.hpp` | *which kind* of row: `pane::Position{.at, .of}`, `pane::Field{.text, .cursor}`, `pane::OutputLine{.number, .body}` | each row kind's margin, columns, separators, wrapping |
 | vocabulary | `look.hpp` | *which role* a piece plays: `ink::status_ok`, `tone::chrome()`, `mark::ok` | the colour, weight and symbol of that role |
 | theme | `maya/style/` schemes | nothing: the user picks it | the hue behind every slot |
+
+### Rows
+
+A pane's header, footer and body are made of a small number of row kinds,
+and agentty names them instead of laying them out:
+
+```cpp
+cfg.header.push_back(pane::Field{.label = "rename", .text = t, .cursor = c, .accent = info});
+cfg.header.push_back(pane::Rule{});
+cfg.prebuilt.push_back(pane::Empty{"no thread matches \"" + q + "\""});
+cfg.footer.push_back(pane::Position{.at = i, .of = n, .noun = "settings"});
+cache.rows.push_back(pane::OutputLine{.number = i + 1, .gutter = g, .body = line});
+```
+
+The kinds are chrome (`Rule`, `Gap`, `Stack`), words (`Help`, `Note`,
+`Empty`, `Pending`, `Warning`, `Remedy`, `Status`, `Lede`, `Fact`,
+`Finding`, `Caption`, `Words`, `More`, `Affordance`), position and keys
+(`Position`, `Window`, `KeyAction`, `Keys`, `Legend`, `Ladder`), input
+(`Field`, `Prompt`), and output (`Command`, `CommandRow`, `OutputLine`,
+`CaptureLine`, `RailText`, `Placeholder`, `Plain`, `ChildCall`,
+`ChildOutput`). Wrapping long text into rows is `pane::wrap`. agentty
+reaches them as `ui::pane`.
 
 `look.hpp` is the part that makes this complete. Before it existed agentty
 still chose hues (`ThemeSlot::Warning`), weights (`.with_bold()`) and
@@ -65,6 +89,9 @@ ink).
 - **Hints in italic.** Change `tone::hint()`.
 - **Retrieval gauge as dots.** Edit `mark::gauge_on` / `gauge_off`.
 - **A new tool-card layout.** Edit `agent_timeline.hpp` / `tool_body_preview.hpp`.
+- **Status bar above the thread.** Reorder the column in `AppLayout::build()`.
+- **Positions as "3 of 40".** Edit `rows::Position`; every picker follows.
+- **A different output gutter.** Edit `rows::OutputLine`; the tool viewer follows.
 - **CLI tables in a different style.** Edit `report.hpp` (`Table`, `check`).
 
 These were tried: making the first two edits changed the `ui_snapshots`
@@ -87,6 +114,8 @@ fails if agentty makes any of these decisions itself:
   instead of its `ui::mark::` name. Prose typography (— … · “ ”) is text
   and is allowed. Two files that parse a wire protocol whose markers are
   glyphs are named in the lint.
+- **builds a row**: `maya::Line{…}`, `Line::row(`, `Line::rule()`, `Span{…}`
+  in view code. A row is a `pane::` kind.
 
 `ctest -R ui_snapshots` pins every surface byte for byte, colour included,
 so a change to the folder shows up as an intentional fixture update:

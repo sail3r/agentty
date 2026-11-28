@@ -5,6 +5,7 @@
 
 #include "panels_prologue.hpp"
 #include "agentty/runtime/view/look.hpp"
+#include <maya/widget/agentty/rows.hpp>
 
 namespace agentty::ui {
 
@@ -27,14 +28,14 @@ Element symbol_panel(const Model& m) {
     // continuation of what was typed in the composer.
     cfg.header.push_back(
         filter_header(o->picker.query(), "symbols", highlight, "# "));
-    cfg.header.push_back(maya::Line::rule());
+    cfg.header.push_back(ui::pane::Rule{});
 
     if (entries.empty()) {
-        cfg.prebuilt.push_back(maya::Line{o->picker.source_ready()
-                ? "  no symbols indexed"
-                : "  indexing symbols… (type to filter as it fills)", fg_italic(muted)});
+        cfg.prebuilt.push_back(ui::pane::Empty{o->picker.source_ready()
+                ? "no symbols indexed"
+                : "indexing symbols… (type to filter as it fills)"});
     } else if (matches.empty()) {
-        cfg.prebuilt.push_back(maya::Line{"  no matches", fg_italic(muted)});
+        cfg.prebuilt.push_back(ui::pane::Empty{"no matches"});
     } else {
         cfg.items.reserve(matches.size());
         for (int i = 0; i < static_cast<int>(matches.size()); ++i) {
@@ -61,8 +62,8 @@ Element symbol_panel(const Model& m) {
     }
 
     if (static_cast<int>(matches.size()) > kViewportH) {
-        cfg.footer.push_back(maya::Line{"  " + std::to_string(o->picker.index() + 1) + "/"
-                + std::to_string(matches.size()), fg_dim(muted)});
+        cfg.footer.push_back(ui::pane::Position{.at = static_cast<int>(o->picker.index()),
+                                            .of = static_cast<int>(matches.size())});
     }
 
     // Same gap as the @ picker: the keys worked, nothing said so.

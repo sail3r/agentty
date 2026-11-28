@@ -19,6 +19,7 @@
 
 #include "agentty/runtime/panel/tool_output.hpp"
 #include "agentty/runtime/view/look.hpp"
+#include <maya/widget/agentty/rows.hpp>
 
 namespace agentty::ui {
 
@@ -86,39 +87,6 @@ std::size_t advance_reveal(const tool_output::Entry& e, std::size_t total, bool 
 } // namespace
 
 namespace {
-// Split one line into rows of at most `w` columns. Breaks at spaces only
-// (output is code, paths and flags, where a hyphen is part of the token),
-// and hard-splits a token longer than a row.
-std::vector<std::string_view> wrap_rows(std::string_view s, int w) {
-    std::vector<std::string_view> out;
-    if (w < 1) w = 1;
-    std::size_t start = 0;
-    while (start < s.size()) {
-        int cols = 0;
-        std::size_t i = start, last_space = std::string_view::npos;
-        while (i < s.size()) {
-            std::size_t next = i;
-            const char32_t cp = maya::decode_utf8(s, next);
-            const int cw = maya::unicode::char_width(cp);
-            if (cols + cw > w) break;
-            cols += cw;
-            if (cp == U' ') last_space = next;
-            i = next;
-        }
-        if (i >= s.size()) { out.push_back(s.substr(start)); break; }
-        std::size_t cut = (last_space != std::string_view::npos && last_space > start)
-                          ? last_space : i;
-        if (cut == start) {   // a zero-room row: take one character
-            std::size_t next = start;
-            (void)maya::decode_utf8(s, next);
-            cut = next;
-        }
-        out.push_back(s.substr(start, cut - start));
-        start = cut;
-    }
-    if (out.empty()) out.push_back(std::string_view{});
-    return out;
-}
 
 // `s` cut to `w` columns, with "…" when it was cut.
 std::string fit_cols(std::string_view s, int w) {
@@ -238,7 +206,7 @@ Element tool_output_panel(const Model& m) {
             cfg.items.push_back(std::move(row));
         }
         if (!compact_list) {
-            cfg.footer.push_back(Line::blank());
+            cfg.footer.push_back(ui::pane::Gap{});
             std::vector<Hint> list_hints{
                 {ui::mark::updown, "move", 5},   // ↑↓
                 {"Enter", "view", 6},
@@ -478,17 +446,16 @@ Element tool_output_panel(const Model& m) {
                 for (std::size_t p = 0; p <= rest.size();) {
                     auto nl = rest.find('\n', p);
                     if (nl == std::string_view::npos) nl = rest.size();
-                    for (auto v : wrap_rows(rest.substr(p, nl - p), std::max(10, pane_w - 2))) {
+                    for (auto v : ui::pane::wrap(rest.substr(p, nl - p), std::max(10, pane_w - 2))) {
                         note_hits(v);
-                        cache.rows.push_back(Line::row({
-                            Span{first ? "$ " : "  ", fg_bold(cmd_hue)},
-                            line_row(v, fg_of(fg), false)}));
+                        cache.rows.push_back(ui::pane::CommandRow{
+                            .body = line_row(v, fg_of(fg), false), .first = first, .hue = cmd_hue});
                         first = false;
                     }
                     if (nl == rest.size()) break;
                     p = nl + 1;
                 }
-                cache.rows.push_back(Line::rule());
+                cache.rows.push_back(ui::pane::Rule{});
             }
         }
 
@@ -540,7 +507,7 @@ Element tool_output_panel(const Model& m) {
                 std::string_view feed = e.call.progress_text();
                 if (feed.starts_with(std::string{ui::mark::diamond} + " ")) {   // ◆ status line
                     if (auto row = task_status_row(feed.substr(0, feed.find('\n'))); !row.empty())
-                        cache.rows.push_back(Line::row({Span{row, fg_of(tool_hue)}}));
+                        cache.rows.push_back(ui::pane::Plain{.text = row, .hue = tool_hue});
                 }
             }
             if (!kids.empty()) {
@@ -550,7 +517,7 @@ Element tool_output_panel(const Model& m) {
                 std::string head = std::to_string(kids.size()) + (kids.size() == 1 ? " call" : " calls");
                 if (bad > 0) head += ui::mark::gap_sep + std::to_string(bad) + " failed";
                 head += "  \xc2\xb7  Tab to pick, Enter to open";
-                cache.rows.push_back(Line::row({Span{head, fg_dim(muted)}}));
+                cache.rows.push_back(ui::pane::Plain{.text = head, .soft = true});
                 const auto t0 = e.call.started_at();
                 const int out_w = std::max(10, pane_w - 6);
                 for (std::size_t ci = 0; ci < kids.size(); ++ci) {
@@ -560,29 +527,16 @@ Element tool_output_panel(const Model& m) {
                     const bool failed = c.state == S::Failed && !cancelled;
                     const bool selected = o->child_cursor == static_cast<int>(ci);
                     const bool open = std::ranges::find(o->child_open, c.id) != o->child_open.end();
-                    const std::string icon = c.state == S::Done ? std::string{ui::mark::ok} + " "
-                                     : failed ? std::string{ui::mark::fail} + " "                  // ✗
-                                     : cancelled ? std::string{ui::mark::blocked} + " "               // ⊘
-                                                 : std::string{ui::mark::off} + " ";             // ○
-                    const Color ic = c.state == S::Done ? Color{success}
-                                   : failed ? Color{danger} : Color{muted};
-                    // Always a duration cell, so the column lines up: the
-                    // time once settled, "…" while running, "–" for none.
-                    std::string dur = c.state == S::Running ? std::string{std::string{"   "} + ui::mark::ellipsis}
-                                    : c.ms >= 1000 ? std::format("{:.1f}s", static_cast<double>(c.ms) / 1000.0)
-                                    : c.ms > 0     ? std::format("{}ms", c.ms)
-                                                   : std::string{ui::mark::range};
-                    if (dur.size() < 7) dur.insert(0, 7 - std::min<std::size_t>(7, string_width(dur)), ' ');
-                    Span what{tool_timeline_detail(kt), failed ? fg_of(danger) : fg_dim(fg)};
-                    what.fill = true;
-                    cache.rows.push_back(Line::row({
-                        Span{selected ? ui::mark::cursor : " ", fg_bold(accent)},   // ▸ cursor
-                        Span{icon, fg_bold(ic)},
-                        Span{tool_display_name(c.name),
-                             cancelled ? fg_bold(muted) : fg_bold(tool_category_color(c.name))},
-                        Span{"  "},
-                        std::move(what),
-                        Span{"  " + dur, fg_dim(muted)}}));
+                    using CS = ui::pane::ChildCall::State;
+                    cache.rows.push_back(ui::pane::ChildCall{
+                        .state = c.state == S::Done ? CS::Done : failed ? CS::Failed
+                               : cancelled ? CS::Cancelled : c.state == S::Running ? CS::Running : CS::Other,
+                        .selected = selected,
+                        .name     = std::string{tool_display_name(c.name)},
+                        .hue      = tool_category_color(c.name),
+                        .detail   = tool_timeline_detail(kt),
+                        .duration = c.ms >= 1000 ? std::format("{:.1f}s", static_cast<double>(c.ms) / 1000.0)
+                                  : c.ms > 0     ? std::format("{}ms", c.ms) : std::string{}});
                     // Opened: the call's own output under it, on a rail.
                     if (open) {
                         std::string_view body = c.output;
@@ -593,26 +547,21 @@ Element tool_output_panel(const Model& m) {
                         for (std::size_t p = 0; p <= body.size() && shown_lines < kMaxOpenLines;) {
                             auto nl = body.find('\n', p);
                             if (nl == std::string_view::npos) nl = body.size();
-                            for (auto v : wrap_rows(body.substr(p, nl - p), out_w)) {
+                            for (auto v : ui::pane::wrap(body.substr(p, nl - p), out_w)) {
                                 if (shown_lines++ >= kMaxOpenLines) break;
-                                Span txt{std::string{v}, failed ? fg_of(danger) : fg_dim(fg)};
-                                txt.fill = true;
-                                cache.rows.push_back(Line::row({
-                                    Span{std::string{"   "} + ui::mark::rail_dash + " ", fg_dim(failed ? danger : muted)},   // ┊
-                                    std::move(txt)}));
+                                cache.rows.push_back(ui::pane::ChildOutput{.text = std::string{v}, .failed = failed});
                             }
                             if (nl == body.size()) break;
                             p = nl + 1;
                         }
                         if (shown_lines >= kMaxOpenLines)
-                            cache.rows.push_back(Line::row({Span{std::string{"   "} + ui::mark::rail_dash + " " + ui::mark::more + " more in the full log",
-                                                                fg_italic(muted)}}));
+                            cache.rows.push_back(ui::pane::ChildOutput{.more = true});
                     }
                 }
             }
 
             if (!e.is_live && !shown.empty()) {
-                if (!kids.empty()) cache.rows.push_back(Line::rule());
+                if (!kids.empty()) cache.rows.push_back(ui::pane::Rule{});
                 const Style prose  = e.failed ? fg_of(danger) : fg_of(fg);
                 const Style strong = fg_bold(fg);
                 const Style head_st = fg_bold(tool_hue);
@@ -626,13 +575,13 @@ Element tool_output_panel(const Model& m) {
                 auto emit = [&](const std::string& lead, Style lead_st, const Marked& md, Style base) {
                     const int lead_w = string_width(lead);
                     bool first = true;
-                    for (auto v : wrap_rows(md.plain, std::max(4, text_w - lead_w))) {
+                    for (auto v : ui::pane::wrap(md.plain, std::max(4, text_w - lead_w))) {
                         const auto off = static_cast<std::size_t>(v.data() - md.plain.data());
-                        Span txt = maya::ToolViewer::marked_span(md, off, v.size(), base);
-                        cache.rows.push_back(Line::row({
-                            Span{std::string{ui::mark::rail} + " ", fg_dim(tool_hue)},   // ┃
-                            Span{first ? lead : std::string(static_cast<std::size_t>(lead_w), ' '), lead_st},
-                            std::move(txt)}));
+                        cache.rows.push_back(ui::pane::RailText{
+                            .rail = tool_hue,
+                            .body = maya::ToolViewer::marked_span(md, off, v.size(), base),
+                            .lead = first ? lead : std::string(static_cast<std::size_t>(lead_w), ' '),
+                            .lead_style = lead_st});
                         first = false;
                     }
                 };
@@ -641,7 +590,7 @@ Element tool_output_panel(const Model& m) {
                 bool in_code = false, any = false, pending_blank = false;
                 auto flush_blank = [&] {
                     if (pending_blank && any)
-                        cache.rows.push_back(Line::row({Span{ui::mark::rail, fg_dim(tool_hue)}}));
+                        cache.rows.push_back(ui::pane::RailText{.rail = tool_hue, .blank = true});
                     pending_blank = false;
                     any = true;
                 };
@@ -751,14 +700,13 @@ Element tool_output_panel(const Model& m) {
                 }
                 if (body.empty()) {
                     note_blank(ln.data());
-                    cache.rows.push_back(Line::row({Span{ui::mark::rail, fg_dim(role_brand)}}));   // ┃
+                    cache.rows.push_back(ui::pane::RailText{.rail = role_brand, .blank = true});
                 } else {
-                    for (auto v : wrap_rows(body, text_w)) {
+                    for (auto v : ui::pane::wrap(body, text_w)) {
                         note_hits(v);
                         note_span(v);
-                        cache.rows.push_back(Line::row({
-                            Span{std::string{ui::mark::rail} + " ", fg_dim(role_brand)},
-                            line_row(v, strong ? beat : prose, false)}));
+                        cache.rows.push_back(ui::pane::RailText{
+                            .rail = role_brand, .body = line_row(v, strong ? beat : prose, false)});
                     }
                 }
                 if (nl == shown.size()) break;
@@ -810,29 +758,26 @@ Element tool_output_panel(const Model& m) {
             cache.out_lines = static_cast<int>(lines.size());
             const int gutter_w = static_cast<int>(std::to_string(lines.size()).size());
             // " N " gutter, then "│ ".
-            const int text_w = std::max(10, pane_w - gutter_w - 4);
+            const int text_w = std::max(10, pane_w - ui::pane::OutputLine::chrome_width(gutter_w));
             const Style base = e.failed ? fg_of(danger) : fg_of(fg);
-            const std::string blank_gutter(static_cast<std::size_t>(gutter_w) + 2, ' ');
             cache.rows.reserve(cache.rows.size() + lines.size());
             for (std::size_t i = 0; i < lines.size(); ++i) {
-                std::string num = std::to_string(i + 1);
-                num.insert(0, static_cast<std::size_t>(gutter_w) - num.size(), ' ');
                 const bool cut = lines[i].starts_with(std::string{ui::mark::more} + " ");   // ⋯ note
                 bool first = true;
-                for (auto v : wrap_rows(lines[i], text_w)) {
+                for (auto v : ui::pane::wrap(lines[i], text_w)) {
                     note_hits(v);
                     if (v.empty()) note_blank(lines[i].data()); else note_span(v);
-                    cache.rows.push_back(Line::row({
-                        Span{first ? " " + num + " " : blank_gutter, fg_dim(muted)},
-                        Span{first ? std::string{ui::mark::rail_thin} + " " : std::string{ui::mark::rail_dash} + " ", fg_dim(pipe_hue)},   // │ ┊
-                        cut ? line_row(v, fg_italic(muted), false)
-                            : line_row(v, base, !e.failed)}));
+                    cache.rows.push_back(ui::pane::OutputLine{
+                        .number = first ? static_cast<int>(i + 1) : 0,
+                        .gutter = gutter_w,
+                        .body   = cut ? line_row(v, fg_italic(muted), false) : line_row(v, base, !e.failed),
+                        .rail   = pipe_hue});
                     first = false;
                 }
             }
             cache.total_cp = cp_at(shown.data() + shown.size());
         } else if (!e.is_live) {
-            cache.rows.push_back(Line::row({Span{"  (no output)", fg_italic(muted)}}));
+            cache.rows.push_back(ui::pane::Placeholder{"(no output)"});
         }
     }
 

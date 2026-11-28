@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <optional>
 #include "agentty/runtime/view/look.hpp"
+#include <maya/widget/agentty/rows.hpp>
 
 namespace agentty::ui {
 
@@ -156,28 +157,23 @@ Element thread_list_panel(const Model& m) {
         // The draft takes the filter's place: a bright line with a REAL
         // caret, same as the settings add-prompt. The highlighted row below
         // stays lit so you can see which thread it renames.
-        std::size_t at = std::string::npos;
-        const std::string shown = maya::panel::detail::with_caret(
-            picker->rename_input,
-            static_cast<std::size_t>(std::max(0, picker->rename_cursor)),
-            panel_terminal_cols() - 14, &at);
-        const auto caret = ui::tone::caret(info);
-        cfg.header.push_back(maya::Line{{"  rename  ", fg_of(info)}, {shown.substr(0, at), fg_bold(fg)}, {shown.substr(at, 3), caret}, {shown.substr(at + 3), fg_bold(fg)}});
-        cfg.header.push_back(maya::Line::rule());
+        cfg.header.push_back(ui::pane::Field{.label = "rename", .text = picker->rename_input,
+                                         .cursor = picker->rename_cursor,
+                                         .width = panel_terminal_cols() - 14, .accent = info});
+        cfg.header.push_back(ui::pane::Rule{});
     } else if (!m.d.threads.empty()) {
         cfg.header.push_back(filter_header(picker->query, "threads"));
-        cfg.header.push_back(maya::Line::rule());   // the rule under the filter, like every picker
+        cfg.header.push_back(ui::pane::Rule{});   // the rule under the filter, like every picker
         if (peek) cfg.header.push_back(maya::PeekCard{std::move(*peek)}.build());
     }
 
     if (m.d.threads.empty()) {
-        cfg.prebuilt.push_back(maya::Line{m.s.threads_loading ? "  Loading conversations…"
-                                : "  No threads yet.", fg_italic(muted)});
+        cfg.prebuilt.push_back(ui::pane::Empty{m.s.threads_loading ? "Loading conversations…"
+                                                               : "No threads yet."});
     } else if (visible.empty()) {
-        std::string why = picker->query.empty()
-            ? std::string{"  no Codex or Claude Code sessions here \xc2\xb7 Tab for more"}
-            : "  no thread matches \"" + picker->query + "\"";
-        cfg.prebuilt.push_back(maya::Line{std::move(why), fg_italic(muted)});
+        cfg.prebuilt.push_back(ui::pane::Empty{picker->query.empty()
+            ? std::string{"no Codex or Claude Code sessions here \xc2\xb7 Tab for more"}
+            : "no thread matches \"" + picker->query + "\""});
     } else {
         cfg.items.reserve(visible.size() + 5);
         const auto now = m.wall_at(maya::anim_now());
@@ -249,14 +245,13 @@ Element thread_list_panel(const Model& m) {
         }
     }
 
-    cfg.footer.push_back(maya::Line::blank());
+    cfg.footer.push_back(ui::pane::Gap{});
     // Positional readout — same "k/N" the ^←→ / Alt+←→ toast shows, so
     // the two navigation surfaces speak one coordinate system.
     if (!visible.empty()) {
-        cfg.footer.push_back(maya::Line{"  " + std::to_string(picker->index + 1) + "/"
-                + std::to_string(visible.size())
-                + (picker->query.empty() ? std::string{}
-                       : " of " + std::to_string(m.d.threads.size())), fg_dim(muted)});
+        cfg.footer.push_back(ui::pane::Position{.at = picker->index, .of = static_cast<int>(visible.size()),
+                                            .total = picker->query.empty() ? -1
+                                                   : static_cast<int>(m.d.threads.size())});
     }
     // Armed delete is a MODE: hint it in the note line, exactly like the
     // account list and the settings add-prompt, so every two-step confirm

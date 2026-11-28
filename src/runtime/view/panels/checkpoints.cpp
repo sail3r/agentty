@@ -6,6 +6,7 @@
 #include "panels_prologue.hpp"
 #include <maya/core/anim_clock.hpp>   // anim_now: the frame clock
 #include "agentty/runtime/view/look.hpp"
+#include <maya/widget/agentty/rows.hpp>
 
 namespace agentty::ui {
 
@@ -83,8 +84,8 @@ Element checkpoints_panel(const Model& m) {
         cfg.items.push_back(std::move(row));
     }
 
-    cfg.footer.push_back(maya::Line::blank());
-    cfg.footer.push_back(maya::Line{"  Restores files and rewinds the transcript here.", fg_dim(muted)});
+    cfg.footer.push_back(ui::pane::Gap{});
+    cfg.footer.push_back(ui::pane::Help{"Restores files and rewinds the transcript here."});
     cfg.footer.push_back(key_hints({
         {ui::mark::updown, "move", 5},   // ↑↓
         {"Enter", "rewind", 3},

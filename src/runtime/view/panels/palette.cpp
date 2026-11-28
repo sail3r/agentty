@@ -5,6 +5,7 @@
 
 #include "panels_prologue.hpp"
 #include "agentty/runtime/view/look.hpp"
+#include <maya/widget/agentty/rows.hpp>
 
 namespace agentty::ui {
 
@@ -33,7 +34,7 @@ Element palette_panel(const Model& m) {
         filter_header(o->query, {}, highlight, std::string{ui::mark::cmd} + " "));   // ⌘
     // Rule under the filter — the same `sep` every other picker draws, so the
     // query box is separated from its results identically everywhere.
-    cfg.header.push_back(maya::Line::rule());
+    cfg.header.push_back(ui::pane::Rule{});
 
     // Each category owns a hue so the flat list reads as coloured bands; the
     // badge keeps its hue on the selected row (Picker contract), so the
@@ -52,8 +53,8 @@ Element palette_panel(const Model& m) {
     };
 
     if (matches.empty()) {
-        cfg.prebuilt.push_back(maya::Line{o->query.empty() ? "  no commands available"
-                             : "  no command matches \"" + o->query + "\"", fg_italic(muted)});
+        cfg.prebuilt.push_back(ui::pane::Empty{o->query.empty() ? std::string{"no commands available"}
+                             : "no command matches \"" + o->query + "\""});
     } else {
         cfg.items.reserve(matches.size() + 6);
         // On the EMPTY query we render real SECTION HEADERS between category
@@ -126,11 +127,11 @@ Element palette_panel(const Model& m) {
         cfg.selected = sel_display;
     }
 
-    cfg.footer.push_back(maya::Line::blank());
+    cfg.footer.push_back(ui::pane::Gap{});
     // Count anchor when the list is scrolled — same grammar as the @ / # pickers.
     if (static_cast<int>(matches.size()) > kViewportH) {
-        cfg.footer.push_back(maya::Line{"  " + std::to_string(o->index + 1) + "/"
-                + std::to_string(matches.size()) + " commands", fg_dim(muted)});
+        cfg.footer.push_back(ui::pane::Position{.at = o->index, .of = static_cast<int>(matches.size()),
+                                            .noun = "commands"});
     }
     cfg.footer.push_back(key_hints({
         {ui::mark::updown, "move", 5},   // ↑↓

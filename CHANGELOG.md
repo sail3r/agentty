@@ -31,6 +31,10 @@ All notable changes to agentty. Versions follow [SemVer](https://semver.org/).
   and the folder decides what they look like. Restyling agentty, down to
   the check mark, is an edit to `third_party/maya/.../widget/agentty/`
   alone. See `docs/LOOK.md`.
+- **Pane rows are named, not drawn.** Every header, footer and body row in
+  agentty's panes (positions, empty states, warnings, text fields, numbered
+  output, an agent's child calls) is a `maya::rows` kind that agentty fills
+  with data; the row's layout lives in the folder. Rendering is unchanged.
 
 ## [0.9.65] - 2026-11-27
 

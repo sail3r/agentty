@@ -277,21 +277,14 @@ reasoning_effort_footer(const Model& m, std::string_view model_id,
     if (effort_capable(caps)) {
         // One line: the effort ladder (current tier bracketed ‹like this› and
         // accented), then the global ^R show/hide toggle. ←/→ cycles the tier.
-        maya::Line parts;
-        parts.add("reasoning ", fg_dim(muted));
         // What this model will actually get for the user's pick.
         const Effort shown = clamp_effort(m.d.effort, caps);
+        ui::pane::Ladder ladder{.label = "reasoning"};
         for (Effort lvl : available_efforts(caps)) {
-            const std::string lbl{effort_label(lvl)};
-            if (lvl == shown) {
-                parts.add(ui::mark::chevron_back, fg_of(accent));      // ‹
-                parts.add(lbl, fg_bold(accent));
-                parts.add(std::string{ui::mark::chevron} + " ", fg_of(accent));   // ›
-            } else {
-                parts.add(lbl + " ", fg_dim(muted));
-            }
+            if (lvl == shown) ladder.current = static_cast<int>(ladder.steps.size());
+            ladder.steps.emplace_back(effort_label(lvl));
         }
-        out.push_back(std::move(parts));
+        out.push_back(ladder);
     } else {
         // No effort control on this model, and nothing else to say about
         // reasoning here — display lives in Appearance. An empty footer row
