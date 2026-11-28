@@ -61,8 +61,11 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
+
+#include <maya/runtime.hpp>   // maya::unlocked, maya::parallel_for
 
 #include "agentty/domain/conversation.hpp"
 #include "agentty/io/persistence.hpp"   // DeserializeError
@@ -119,18 +122,37 @@ public:
 
     // Parse messages [from, to). Clamped to the log; from >= to yields {}.
     //
-    // This is the ONLY read path. The whole-thread call is range(0, size())
-    // and the windowed call is range(size()-60, size()); both are the same
-    // code, because the difference is only where the seek lands.
+    // The whole-thread call is range(cap, 0, size()) and the windowed call
+    // range(cap, size()-60, size()); both are the same code, because the
+    // difference is only where the seek lands.
     //
     // A line that fails to parse is SKIPPED rather than failing the read.
     // A single corrupt line in a 2519-message history must not cost the
     // user the other 2518 — the same judgement load_all_threads already
     // makes for a corrupt thread file among many.
-    [[nodiscard]] std::vector<Message> range(std::size_t from,
+    //
+    // TWO WAYS TO RUN, and every caller picks one:
+    //
+    //   range(cap, …)   lines parse on every core (jaal's parallel_for):
+    //                   ~85 ms for a 16 MB thread instead of ~280. Needs
+    //                   `unlocked`, because it blocks on helper threads,
+    //                   and the same in every process -- the TUI, ACP,
+    //                   `agentty run`, a test.
+    //   range_serial()  on the calling thread, for code that holds a lock
+    //                   (the save path verifies under the thread's lane).
+    //
+    // This used to call maya::exec::parallel_for, the VIEW library's hook.
+    // It is installed only inside maya::run, so every other process parsed
+    // on one core without saying so, and the hook took no capability, so a
+    // blocking fork-join ran under the thread-log lock unchecked.
+    [[nodiscard]] std::vector<Message> range(const maya::unlocked& cap, std::size_t from,
                                              std::size_t to) const;
+    [[nodiscard]] std::vector<Message> range_serial(std::size_t from, std::size_t to) const;
 
-    [[nodiscard]] std::vector<Message> all() const { return range(0, size()); }
+    [[nodiscard]] std::vector<Message> all(const maya::unlocked& cap) const {
+        return range(cap, 0, size());
+    }
+    [[nodiscard]] std::vector<Message> all_serial() const { return range_serial(0, size()); }
 
     // Append one message: one line to the log, one offset to the index.
     // O(1) in thread size — this is what replaces rewriting the whole
@@ -163,7 +185,7 @@ public:
     // (see docs/THREAD_STORE.md §9.0). It is not the fast path — that is
     // meta() plus a windowed range() — but it is already ~4x faster than
     // parsing one whole-document JSON, so it is worth having first.
-    [[nodiscard]] Thread load_thread() const;
+    [[nodiscard]] Thread load_thread(const maya::unlocked& cap) const;
 
     // Metadata + full history, written together. Used by save and by the
     // migration from the legacy format.
@@ -188,6 +210,14 @@ private:
     [[nodiscard]] bool write_index_() const;
     // Append one offset. O(1), and the only index write a turn performs.
     [[nodiscard]] bool append_offset_(std::uint64_t at) const;
+
+    // The one read body. `run(chunks, parse)` calls parse(c) for every chunk
+    // c in [0, chunks): range() hands it jaal's parallel_for, range_serial()
+    // a plain loop. Everything else -- the seek, the line split, the order
+    // of the output, the dropped-line count -- is the same code.
+    using ChunkRunner = std::function<void(std::size_t, const std::function<void(std::size_t)>&)>;
+    [[nodiscard]] std::vector<Message> read_window_(std::size_t from, std::size_t to,
+                                                    const ChunkRunner& run) const;
 
     // Offset of a final line that has no terminating newline — i.e. a
     // crash between writing a message and writing its '\n'. kNoTear when

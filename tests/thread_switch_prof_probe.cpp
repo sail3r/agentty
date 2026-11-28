@@ -18,6 +18,7 @@
 // Accepts .json or .jsonl so the same thread can be measured either side
 // of the migration. No argument = no-op pass.
 
+#include "agtest_cap.hpp"
 #include <agentty/domain/session.hpp>
 #include <agentty/io/persistence.hpp>
 #include <agentty/io/thread_log.hpp>
@@ -69,7 +70,7 @@ int main(int argc, char** argv) {
     auto t = clk::now();
     std::optional<Thread> loaded;
     if (p.extension() == ".jsonl") {
-        if (auto log = ThreadLog::open_path(p)) loaded = log->load_thread();
+        if (auto log = ThreadLog::open_path(p)) loaded = log->load_thread(agtest::cap());
     } else {
         if (auto r = persistence::load_thread_file(::agentty::IoAccess::grant(), p)) loaded = std::move(*r);
     }

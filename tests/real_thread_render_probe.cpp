@@ -73,7 +73,7 @@ int main(int argc, char** argv) {
     std::optional<Thread> loaded;
     if (p.extension() == ".jsonl") {
         auto log = ThreadLog::open_path(p);
-        if (log) loaded = log->load_thread();
+        if (log) loaded = log->load_thread(agtest::cap());
     } else {
         // Sub-time the load so the probe says WHERE the thread-switch
         // latency is: raw I/O, the JSON DOM parse, or the DOM->Thread walk.

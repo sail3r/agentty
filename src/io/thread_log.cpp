@@ -6,13 +6,14 @@
 #include "agentty/io/shared_file.hpp"
 #include "agentty/util/logx.hpp"
 
-#include <maya/core/executor.hpp>   // exec::parallel_for: lines parse independently
+#include <maya/runtime.hpp>   // maya::parallel_for: lines parse independently
 #include <nlohmann/json.hpp>
 #include <simdjson.h>
 
 #include <algorithm>
 #include <optional>
 #include <string_view>
+#include <thread>      // hardware_concurrency: the parse width
 #include <vector>
 
 #include <cstdio>
@@ -345,7 +346,28 @@ bool ThreadLog::set_meta(const Thread& t) {
 
 // ── read ─────────────────────────────────────────────────────────────
 
-std::vector<Message> ThreadLog::range(std::size_t from, std::size_t to) const {
+std::vector<Message> ThreadLog::range(const maya::unlocked& cap, std::size_t from,
+                                     std::size_t to) const {
+    // Parse on every core through jaal's parallel_for: it joins every helper
+    // before returning, and takes `unlocked` because it blocks on them.
+    // That is the same in every process, so the TUI, ACP, `agentty run` and
+    // the race tests all run this path; there's no runtime to install first.
+    return read_window_(from, to, [&cap](std::size_t chunks,
+                                         const std::function<void(std::size_t)>& parse) {
+        const unsigned hc = std::thread::hardware_concurrency();
+        maya::parallel_for(cap, chunks, hc == 0 ? 4 : hc, parse);
+    });
+}
+
+std::vector<Message> ThreadLog::range_serial(std::size_t from, std::size_t to) const {
+    return read_window_(from, to, [](std::size_t chunks,
+                                     const std::function<void(std::size_t)>& parse) {
+        for (std::size_t c = 0; c < chunks; ++c) parse(c);
+    });
+}
+
+std::vector<Message> ThreadLog::read_window_(std::size_t from, std::size_t to,
+                                             const ChunkRunner& run) const {
     std::vector<Message> out;
     const std::size_t n = offsets_.size();
     if (from >= n || from >= to) return out;
@@ -409,7 +431,7 @@ std::vector<Message> ThreadLog::range(std::size_t from, std::size_t to) const {
         }
     };
     if (chunks == 1) parse_chunk(0);
-    else maya::exec::parallel_for(chunks, parse_chunk);
+    else run(chunks, parse_chunk);
 
     out.reserve(lines.size());
     std::size_t nj = 0, nm = 0;
@@ -571,9 +593,9 @@ bool ThreadLog::exists() const noexcept {
     return fs::is_regular_file(log_, ec);
 }
 
-Thread ThreadLog::load_thread() const {
+Thread ThreadLog::load_thread(const maya::unlocked& cap) const {
     Thread t = meta_thread_;
-    t.messages = all();
+    t.messages = all(cap);
     // The compaction records were read before the message count was
     // known (metadata is a separate file), so apply the same bound the
     // whole-document loader applies: a record pointing past the end of

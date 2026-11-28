@@ -60,7 +60,7 @@ void save(const Thread& t) {
 }
 
 Thread load(const Thread& t) {
-    auto got = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto got = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(got.has_value());
     return std::move(*got);
 }
@@ -384,7 +384,7 @@ TEST_CASE("thread log: truncate_to cuts both files and appends cleanly") {
 
     auto again = ThreadLog::open(id);   // re-read the FILES, not memory
     REQUIRE(again.has_value());
-    const auto all = again->all();
+    const auto all = again->all(agtest::cap());
     REQUIRE(all.size() == 4u);
     CHECK(all[2].id.value == "m2");
     CHECK(all[3].id.value == "m42");

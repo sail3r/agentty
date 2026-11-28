@@ -29,7 +29,7 @@ using namespace agentty;
 static std::optional<Thread> load_t(const ThreadId& id) {
     // Through the STORE SEAM, not a hardcoded path: a saved thread now
     // lives in the log format, and <id>.json is retired once it verifies.
-    return persistence::load_thread_by_id(::agentty::IoAccess::grant(), id);
+    return persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), id);
 }
 
 namespace {

@@ -72,7 +72,7 @@ TEST_CASE("lazy image: save → load round-trips the exact bytes") {
     persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), t);
     persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
 
-    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(loaded.has_value());
     REQUIRE(loaded->messages.size() == 1);
     REQUIRE(loaded->messages[0].images.size() == 1);
@@ -88,7 +88,7 @@ TEST_CASE("lazy image: loading does NOT materialise the bytes") {
     persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), t);
     persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
 
-    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(loaded.has_value());
     const auto& img = loaded->messages[0].images[0];
 
@@ -109,7 +109,7 @@ TEST_CASE("lazy image: a copy of an unmaterialised image still resolves") {
     persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), t);
     persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
 
-    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(loaded.has_value());
 
     // Threads are copied around freely (checkpoints, forks, the view cache).
@@ -127,7 +127,7 @@ TEST_CASE("lazy image: re-saving an unmaterialised image keeps the payload") {
     Thread t = thread_with_image(original);
     persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), t);
     persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
-    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(loaded.has_value());
     CHECK(!loaded->messages[0].images[0].materialised());
 
@@ -135,7 +135,7 @@ TEST_CASE("lazy image: re-saving an unmaterialised image keeps the payload") {
     persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), *loaded);
     persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
 
-    auto again = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto again = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(again.has_value());
     REQUIRE(again->messages[0].images.size() == 1);
     CHECK_MESSAGE(again->messages[0].images[0].bytes() == original,
@@ -258,7 +258,7 @@ TEST_CASE("lazy image: a legacy inline image migrates to a blob on save") {
                   "and the thread file must shrink by the payload size");
 
     // And the image still reads back byte-for-byte.
-    auto migrated = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto migrated = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(migrated.has_value());
     REQUIRE(migrated->messages[0].images.size() == 1);
     CHECK(migrated->messages[0].images[0].bytes() == original);
@@ -285,7 +285,7 @@ TEST_CASE("lazy image: many threads reading one unmaterialised image") {
     Thread t = thread_with_image(original);
     persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), t);
     persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
-    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(loaded.has_value());
 
     // One object shared by reference, AND copies of it: both are real

@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
 
     std::optional<Thread> loaded;
     if (p.extension() == ".jsonl") {
-        if (auto log = ThreadLog::open_path(p)) loaded = log->load_thread();
+        if (auto log = ThreadLog::open_path(p)) loaded = log->load_thread(agtest::cap());
     } else if (auto r = persistence::load_thread_file(::agentty::IoAccess::grant(), p)) {
         loaded = std::move(*r);
     }

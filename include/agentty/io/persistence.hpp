@@ -84,7 +84,9 @@ write_thread_transcript_md(Io, const Thread& t);
 // before it existed, and store it in the index so it is done once. Returns
 // those threads, header only. Slow per thread (a full load), so callers run
 // it off the UI thread in small batches, after the list is up.
-[[nodiscard]] std::vector<Thread> backfill_picker_summaries(Io, const lock_levels::below_file_lane&,
+// Takes `unlocked`, not a lane bound: each load parses on every core, and
+// that blocks on helper threads, which is only safe holding no lock.
+[[nodiscard]] std::vector<Thread> backfill_picker_summaries(Io, const maya::unlocked&,
                                                             const std::vector<ThreadId>& ids);
 
 // Strict per-file loader. Returns the typed error so callers can react
@@ -254,7 +256,9 @@ void clamp_compactions(Thread& t);
 // This is the seam where the new format becomes load-bearing. Both
 // formats are read forever: a user's history predates the log, and
 // nothing is rewritten until that thread is next saved.
-[[nodiscard]] std::optional<Thread> load_thread_by_id(Io, const ThreadId& id);
+// The log parses on every core (ThreadLog::range), which blocks on helper
+// threads: hence `unlocked`. Every caller is a thread root or a job.
+[[nodiscard]] std::optional<Thread> load_thread_by_id(Io, const maya::unlocked&, const ThreadId& id);
 
 // What a parsed thread was read FROM (domain/conversation.hpp: LogStamp).
 [[nodiscard]] LogStamp log_stamp(Io, const ThreadId& id);
@@ -286,7 +290,8 @@ public:
             [&](const maya::unlocked& c) { return persistence::load_all_threads(io_, c); });
     }
     [[nodiscard]] std::optional<Thread> load_thread(const ThreadId& id) {
-        return persistence::load_thread_by_id(io_, id);
+        return maya::thread_root(
+            [&](const maya::unlocked& c) { return persistence::load_thread_by_id(io_, c, id); });
     }
     [[nodiscard]] LogStamp log_stamp(const ThreadId& id) {
         return persistence::log_stamp(io_, id);

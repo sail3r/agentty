@@ -115,6 +115,62 @@ int main() {
         std::printf("  post-flush save: %s\n", landed ? "persisted" : "DROPPED");
     }
 
+    // ── Parallel loads while the thread is being saved ────────────────────
+    // A whole-thread load parses its log on every core (ThreadLog::range,
+    // jaal's parallel_for). Several readers do that at once while a writer
+    // keeps growing the same thread under its lane: no race, and every load
+    // sees a whole, in-order prefix of what was saved -- never a torn mix.
+    {
+        constexpr int kBase = 400, kGrowth = 40, kReaders = 4, kLoads = 6;
+        agentty::Thread big;
+        big.id = agentty::ThreadId{"race-big"};
+        for (int i = 0; i < kBase; ++i) {
+            agentty::Message m;
+            m.role = (i % 2) ? agentty::Role::Assistant : agentty::Role::User;
+            m.id   = agentty::MessageId{"m" + std::to_string(i)};
+            m.text = "message " + std::to_string(i) + std::string(200, 'x');
+            big.messages.push_back(std::move(m));
+        }
+        agentty::persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), big);
+        agentty::persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
+
+        std::atomic<int> bad{0}, loads{0};
+        std::vector<std::thread> ts;
+        ts.emplace_back([&] {                       // the writer
+            agentty::Thread t = big;
+            for (int g = 0; g < kGrowth; ++g) {
+                agentty::Message m;
+                m.role = agentty::Role::User;
+                m.id   = agentty::MessageId{"g" + std::to_string(g)};
+                m.text = "grown " + std::to_string(g);
+                t.messages.push_back(std::move(m));
+                agentty::persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), t);
+            }
+        });
+        for (int r = 0; r < kReaders; ++r) {
+            ts.emplace_back([&] {
+                for (int k = 0; k < kLoads; ++k) {
+                    auto got = agentty::persistence::load_thread_by_id(
+                        ::agentty::IoAccess::grant(), agtest::cap(), big.id);
+                    loads.fetch_add(1);
+                    if (!got || got->messages.size() < static_cast<std::size_t>(kBase)) { bad.fetch_add(1); continue; }
+                    for (int i = 0; i < kBase; ++i)
+                        if (got->messages[static_cast<std::size_t>(i)].id.value != "m" + std::to_string(i)) {
+                            bad.fetch_add(1);
+                            break;
+                        }
+                }
+            });
+        }
+        for (auto& t : ts) t.join();
+        agentty::persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
+        auto final_t = agentty::persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), big.id);
+        check(bad.load() == 0, "a parallel load returned a torn or out-of-order thread");
+        check(final_t && final_t->messages.size() == static_cast<std::size_t>(kBase + kGrowth),
+              "the final save did not land");
+        std::printf("  parallel loads under saves: %d loads, %d bad\n", loads.load(), bad.load());
+    }
+
     std::error_code ec;
     fs::remove_all(root, ec);
 

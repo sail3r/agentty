@@ -18,6 +18,7 @@
 // it no-ops (and passes) when the corpus isn't there. Run it by hand
 // before trusting the migration with anyone's history.
 
+#include "agtest_cap.hpp"
 #include <agentty/domain/conversation.hpp>
 #include <agentty/io/persistence.hpp>
 #include <agentty/io/thread_log.hpp>
@@ -148,7 +149,7 @@ int main(int argc, char** argv) {
         auto reopened = ThreadLog::open_path(work / (id + ".jsonl"));
         if (!reopened) { bad.push_back({id, "could not reopen"}); continue; }
 
-        const auto back = reopened->all();
+        const auto back = reopened->all(agtest::cap());
         if (back.size() != loaded->messages.size()) {
             bad.push_back({id, "message count " + std::to_string(back.size())
                                + " != " + std::to_string(loaded->messages.size())});
@@ -168,7 +169,7 @@ int main(int argc, char** argv) {
         // The windowed read must agree with the full read, since that is
         // the whole point of the offset index.
         if (back.size() > 60) {
-            const auto tail = reopened->range(back.size() - 60, back.size());
+            const auto tail = reopened->range(agtest::cap(), back.size() - 60, back.size());
             if (tail.size() != 60) {
                 bad.push_back({id, "tail window size"});
                 continue;

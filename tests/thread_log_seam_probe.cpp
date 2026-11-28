@@ -102,7 +102,7 @@ int main(int argc, char** argv) {
 
     // 1. Read via the seam BEFORE any log exists — must take the legacy path.
     auto t0 = std::chrono::steady_clock::now();
-    auto legacy = persistence::load_thread_by_id(::agentty::IoAccess::grant(), id);
+    auto legacy = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), id);
     const auto legacy_ms = ms_since(t0);
     if (!legacy) {
         std::printf("FAIL: could not load %s at all\n", id.value.c_str());
@@ -125,7 +125,7 @@ int main(int argc, char** argv) {
     // 3. Read via the seam AGAIN — must now take the log path, and must
     //    produce the same thread. This is the whole commit in one check.
     t0 = std::chrono::steady_clock::now();
-    auto viaLog = persistence::load_thread_by_id(::agentty::IoAccess::grant(), id);
+    auto viaLog = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), id);
     const auto log_ms = ms_since(t0);
     if (!viaLog) { std::printf("FAIL: log load returned nothing\n"); return 1; }
     std::printf("log load:    %lld ms, %zu messages\n",
@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
     // 5. Deleting must take the log with it.
     persistence::delete_thread(::agentty::IoAccess::grant(), agtest::cap(), id);
     check(!fs::exists(log_path), "delete_thread must remove the log");
-    check(!persistence::load_thread_by_id(::agentty::IoAccess::grant(), id).has_value(),
+    check(!persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), id).has_value(),
           "a deleted thread must not load");
 
     if (failures == 0) {

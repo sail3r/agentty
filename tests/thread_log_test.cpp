@@ -111,9 +111,47 @@ TEST_CASE("thread log: round-trips messages verbatim") {
     auto reopened = ThreadLog::open_path(path);
     REQUIRE(reopened.has_value());
     CHECK(reopened->size() == sent.size());
-    CHECK_MESSAGE(same_all(reopened->all(), sent),
+    CHECK_MESSAGE(same_all(reopened->all(agtest::cap()), sent),
                   "every message must survive a write/read cycle verbatim, "
                   "embedded newlines and all");
+}
+
+TEST_CASE("thread log: the parallel read equals the serial read, in order") {
+    // range(cap) parses in chunks on every core (jaal's parallel_for, which
+    // runs in ANY process: this test has no maya::run and no executor);
+    // range_serial() is the same body on one thread. Big enough for many
+    // chunks, with corrupt lines on and around chunk boundaries, since
+    // that's where a parallel parse could reorder or lose messages.
+    const auto path = fresh_log("parallel_equals_serial");
+    const auto sent = make_messages(1000, /*nasty=*/true);
+    {
+        auto log = ThreadLog::open_path(path);
+        REQUIRE(log.has_value());
+        for (const auto& m : sent) REQUIRE(log->append(m));
+    }
+    // Corrupt three lines in place: the 1st, one at a chunk edge, the last.
+    std::string bytes = read_file(path);
+    auto nth_line = [&](std::size_t k) {
+        std::size_t at = 0;
+        for (std::size_t i = 0; i < k; ++i) at = bytes.find('\n', at) + 1;
+        return at;
+    };
+    for (std::size_t k : {std::size_t{0}, std::size_t{63}, std::size_t{999}}) bytes[nth_line(k)] = '#';
+    { std::ofstream(path, std::ios::binary | std::ios::trunc) << bytes; }
+
+    auto log = ThreadLog::open_path(path);
+    REQUIRE(log.has_value());
+    const auto par = log->all(agtest::cap());
+    const auto ser = log->all_serial();
+    CHECK(par.size() == sent.size() - 3);
+    CHECK_MESSAGE(same_all(par, ser), "parallel and serial reads must agree message for message");
+    // Order: what survives is exactly `sent` minus the three broken lines.
+    std::vector<Message> want;
+    for (std::size_t i = 0; i < sent.size(); ++i)
+        if (i != 0 && i != 63 && i != 999) want.push_back(sent[i]);
+    CHECK(same_all(par, want));
+    // And a window crossing chunk edges.
+    CHECK(same_all(log->range(agtest::cap(), 50, 300), log->range_serial(50, 300)));
 }
 
 TEST_CASE("thread log: an embedded newline does not split a message") {
@@ -131,7 +169,7 @@ TEST_CASE("thread log: an embedded newline does not split a message") {
 
     CHECK_MESSAGE(log->size() == 1u,
                   "a message containing newlines is still ONE log entry");
-    const auto back = log->all();
+    const auto back = log->all(agtest::cap());
     REQUIRE(back.size() == 1u);
     CHECK(back[0].text == m.text);
 
@@ -151,25 +189,25 @@ TEST_CASE("thread log: windowed reads match the full read") {
 
     auto log = ThreadLog::open_path(path);
     REQUIRE(log.has_value());
-    const auto all = log->all();
+    const auto all = log->all(agtest::cap());
     REQUIRE(all.size() == sent.size());
 
     // The thread-switch shape: the last screenful.
-    const auto tail = log->range(log->size() - 60, log->size());
+    const auto tail = log->range(agtest::cap(), log->size() - 60, log->size());
     REQUIRE(tail.size() == 60u);
     for (std::size_t i = 0; i < tail.size(); ++i)
         CHECK(same(tail[i], all[all.size() - 60 + i]));
 
     // A window from the middle, and the degenerate cases.
-    const auto mid = log->range(40, 60);
+    const auto mid = log->range(agtest::cap(), 40, 60);
     REQUIRE(mid.size() == 20u);
     CHECK(same(mid.front(), all[40]));
     CHECK(same(mid.back(),  all[59]));
 
-    CHECK(log->range(10, 10).empty());          // empty window
-    CHECK(log->range(50, 10).empty());          // reversed
-    CHECK(log->range(9999, 10000).empty());     // past the end
-    CHECK(log->range(190, 9999).size() == 10u); // clamped to the log
+    CHECK(log->range(agtest::cap(), 10, 10).empty());          // empty window
+    CHECK(log->range(agtest::cap(), 50, 10).empty());          // reversed
+    CHECK(log->range(agtest::cap(), 9999, 10000).empty());     // past the end
+    CHECK(log->range(agtest::cap(), 190, 9999).size() == 10u); // clamped to the log
 }
 
 TEST_CASE("thread log: the index is a cache, not truth") {
@@ -190,7 +228,7 @@ TEST_CASE("thread log: the index is a cache, not truth") {
         auto log = ThreadLog::open_path(path);
         REQUIRE(log.has_value());
         CHECK_MESSAGE(log->size() == sent.size(), what);
-        CHECK_MESSAGE(same_all(log->all(), sent), what);
+        CHECK_MESSAGE(same_all(log->all(agtest::cap()), sent), what);
     };
 
     // 1. Deleted outright.
@@ -253,7 +291,7 @@ TEST_CASE("thread log: a torn append costs only the partial line") {
 
     auto log = ThreadLog::open_path(path);
     REQUIRE(log.has_value());
-    const auto back = log->all();
+    const auto back = log->all(agtest::cap());
     CHECK_MESSAGE(back.size() == sent.size() - 1,
                   "every complete message survives; only the torn one is lost");
     for (std::size_t i = 0; i < back.size(); ++i) CHECK(same(back[i], sent[i]));
@@ -262,7 +300,7 @@ TEST_CASE("thread log: a torn append costs only the partial line") {
     CHECK(log->append(make_message(9999)));
     auto after = ThreadLog::open_path(path);
     REQUIRE(after.has_value());
-    CHECK(after->all().size() == sent.size());
+    CHECK(after->all(agtest::cap()).size() == sent.size());
 }
 
 TEST_CASE("thread log: append is O(1) in thread size") {
@@ -301,7 +339,7 @@ TEST_CASE("thread log: append is O(1) in thread size") {
     auto reopened = ThreadLog::open_path(path);
     REQUIRE(reopened.has_value());
     CHECK(reopened->size() == sent.size() + 1);
-    CHECK(same(reopened->all().back(), extra));
+    CHECK(same(reopened->all(agtest::cap()).back(), extra));
 }
 
 TEST_CASE("thread log: many appends stay O(1) each") {
@@ -332,7 +370,7 @@ TEST_CASE("thread log: many appends stay O(1) each") {
     REQUIRE(reopened.has_value());
     CHECK_MESSAGE(reopened->size() == 650u,
                   "and every appended message must still be there");
-    CHECK(same(reopened->all().back(), make_message(2399)));
+    CHECK(same(reopened->all(agtest::cap()).back(), make_message(2399)));
 }
 
 TEST_CASE("thread log: appending does not rewrite the index") {
@@ -385,7 +423,7 @@ TEST_CASE("thread log: rewrite replaces history atomically") {
     REQUIRE(reopened.has_value());
     CHECK_MESSAGE(reopened->size() == 10u,
                   "the index must shrink with the log, not keep stale offsets");
-    CHECK(same_all(reopened->all(), shorter));
+    CHECK(same_all(reopened->all(agtest::cap()), shorter));
 }
 
 TEST_CASE("thread log: an empty or absent log is a valid empty thread") {
@@ -394,8 +432,8 @@ TEST_CASE("thread log: an empty or absent log is a valid empty thread") {
     REQUIRE(log.has_value());
     CHECK(log->empty());
     CHECK(log->size() == 0u);
-    CHECK(log->all().empty());
-    CHECK(log->range(0, 100).empty());
+    CHECK(log->all(agtest::cap()).empty());
+    CHECK(log->range(agtest::cap(), 0, 100).empty());
 
     // A zero-byte file left by an interrupted create is the same thing.
     { std::ofstream out(path, std::ios::binary | std::ios::trunc); }
@@ -439,7 +477,7 @@ TEST_CASE("thread log: an in-flight tool call reloads as interrupted, not as its
     REQUIRE(log.has_value());
     REQUIRE(log->append(m));
 
-    const auto back = log->all();
+    const auto back = log->all(agtest::cap());
     REQUIRE(back.size() == 1u);
     REQUIRE(back[0].tool_calls.size() == 1u);
 
@@ -469,7 +507,7 @@ TEST_CASE("thread log: an in-flight tool call reloads as interrupted, not as its
     done.tool_calls.push_back(fin);
     REQUIRE(log->append(done));
 
-    const auto back2 = log->all();
+    const auto back2 = log->all(agtest::cap());
     REQUIRE(back2.size() == 2u);
     CHECK(back2[1].tool_calls[0].output() == "real output");
 }
@@ -503,7 +541,7 @@ TEST_CASE("thread log: metadata round-trips beside the messages") {
 
     auto log = ThreadLog::open_path(path);
     REQUIRE(log.has_value());
-    const Thread back = log->load_thread();
+    const Thread back = log->load_thread(agtest::cap());
 
     CHECK(back.id.value     == t.id.value);
     CHECK(back.title        == t.title);
@@ -542,7 +580,7 @@ TEST_CASE("thread log: a compaction past the end of history is dropped") {
 
     auto reopened = ThreadLog::open_path(path);
     REQUIRE(reopened.has_value());
-    const Thread back = reopened->load_thread();
+    const Thread back = reopened->load_thread(agtest::cap());
     REQUIRE(back.compactions.size() == 1u);
     CHECK(back.compactions[0].up_to_index == 3u);
 }

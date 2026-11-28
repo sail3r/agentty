@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
     // (read-only) and let every write land in the sandbox.
     std::optional<Thread> loaded;
     if (src.extension() == ".jsonl") {
-        if (auto log = ThreadLog::open_path(src)) loaded = log->load_thread();
+        if (auto log = ThreadLog::open_path(src)) loaded = log->load_thread(agtest::cap());
     } else if (auto t = persistence::load_thread_file(::agentty::IoAccess::grant(), src)) {
         loaded = std::move(*t);
     }

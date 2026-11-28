@@ -84,7 +84,7 @@ TEST_CASE("migration: saving a legacy thread moves it to the log") {
                   "and retire the legacy document once it verifies");
 
     // The thread must come back intact through the normal store seam.
-    auto back = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto back = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(back.has_value());
     CHECK(back->id.value  == t.id.value);
     CHECK(back->title     == t.title);
@@ -107,7 +107,7 @@ TEST_CASE("migration: a thread with no legacy file just writes the log") {
 
     CHECK(fs::exists(log_path(t)));
     CHECK_FALSE(fs::exists(legacy_path(t)));
-    auto back = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto back = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(back.has_value());
     CHECK(back->messages.size() == t.messages.size());
     wipe(t);
@@ -134,7 +134,7 @@ TEST_CASE("migration: saving again is idempotent") {
     persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), t);
     persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
 
-    auto back = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto back = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(back.has_value());
     CHECK_MESSAGE(back->messages.size() == 11u,
                   "the second save must replace history, not append to it");
@@ -159,7 +159,7 @@ TEST_CASE("migration: Smart Mode routing cards are not persisted") {
     persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), t);
     persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
 
-    auto back = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto back = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(back.has_value());
     CHECK_MESSAGE(back->messages.size() == 6u,
                   "the routing card must not be written to disk");
@@ -194,7 +194,7 @@ TEST_CASE("migration: an unwritable log keeps the legacy document") {
                   "a failed log write must leave the legacy document alone");
 
     // And the thread still loads, through the legacy path.
-    auto back = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto back = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(back.has_value());
     CHECK(back->messages.size() == t.messages.size());
 
@@ -214,7 +214,7 @@ TEST_CASE("migration: deleting a migrated thread removes every file") {
     CHECK_FALSE(fs::exists(log_path(t)));
     CHECK_FALSE(fs::exists(persistence::threads_dir() / (t.id.value + ".ofs")));
     CHECK_FALSE(fs::exists(persistence::threads_dir() / (t.id.value + ".meta.json")));
-    CHECK_FALSE(persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id).has_value());
+    CHECK_FALSE(persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id).has_value());
 }
 
 TEST_CASE("migration: the picker lists a migrated thread exactly once") {

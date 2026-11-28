@@ -9,6 +9,7 @@
 // Prints the cost of the three stages a turn pays, so a regression in any
 // one of them is attributable.
 
+#include "agtest_cap.hpp"
 #include <agentty/io/persistence.hpp>
 #include <agentty/io/thread_log.hpp>
 #include <agentty/provider/anthropic/transport.hpp>
@@ -49,7 +50,7 @@ int main(int argc, char** argv) {
 
     std::optional<Thread> loaded;
     if (src.extension() == ".jsonl") {
-        if (auto log = ThreadLog::open_path(src)) loaded = log->load_thread();
+        if (auto log = ThreadLog::open_path(src)) loaded = log->load_thread(agtest::cap());
     } else if (auto t = persistence::load_thread_file(::agentty::IoAccess::grant(), src)) {
         loaded = std::move(*t);
     }

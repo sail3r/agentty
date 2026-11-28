@@ -1867,7 +1867,7 @@ a::NewSessionResult AgentServer::on_fork_session(const Cap& cap, const a::ForkSe
         return Copy{s.thread, s.profile, s.model, s.provider, s.effort, s.show_reasoning};
     });
     if (!copy) {
-        auto loaded = persistence::load_thread_by_id(IoAccess::grant(), ThreadId{src});
+        auto loaded = persistence::load_thread_by_id(IoAccess::grant(), cap, ThreadId{src});
         if (!loaded)
             throw a::RpcError(a::errc::InvalidParams, "session/fork: no such session: " + src,
                               json{{"sessionId", src}});
@@ -1948,7 +1948,7 @@ a::LoadSessionResult AgentServer::on_load_session(const Cap& cap, const a::LoadS
         // load_thread_by_id reads either on-disk format (the append log or
         // the legacy single document); a bare <id>.json read misses a thread
         // saved as a log.
-        auto loaded = persistence::load_thread_by_id(IoAccess::grant(), ThreadId{sid});
+        auto loaded = persistence::load_thread_by_id(IoAccess::grant(), cap, ThreadId{sid});
         // A subagent run, opened from its parent's card.
         if (!loaded) loaded = persistence::load_subagent_thread(IoAccess::grant(), ThreadId{sid});
         if (!loaded)

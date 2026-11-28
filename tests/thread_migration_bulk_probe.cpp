@@ -142,7 +142,7 @@ int main(int argc, char** argv) {
     before.reserve(ids.size());
     std::size_t unreadable = 0;
     for (const auto& id : ids) {
-        auto t = persistence::load_thread_by_id(::agentty::IoAccess::grant(), id);
+        auto t = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), id);
         if (!t) { ++unreadable; before.push_back({}); continue; }
         before.push_back(fingerprint(*t));
     }
@@ -153,7 +153,7 @@ int main(int argc, char** argv) {
     const auto t0 = std::chrono::steady_clock::now();
     std::size_t migrated = 0;
     for (const auto& id : ids) {
-        auto t = persistence::load_thread_by_id(::agentty::IoAccess::grant(), id);
+        auto t = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), id);
         if (!t) continue;
         persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), *t);
         ++migrated;
@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
     std::size_t lost = 0, mismatched = 0, still_legacy = 0;
     for (std::size_t i = 0; i < ids.size(); ++i) {
         if (before[i].messages == 0 && before[i].content == 0) continue; // skipped
-        auto t = persistence::load_thread_by_id(::agentty::IoAccess::grant(), ids[i]);
+        auto t = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), ids[i]);
         if (!t) {
             ++lost;
             std::printf("  LOST: %s no longer loads\n", ids[i].value.c_str());

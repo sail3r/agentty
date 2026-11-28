@@ -6,6 +6,7 @@
 // see both halves of "tool finished -> bytes on the wire".
 //   agentty_standalone_tests turn_prep_bench <thread-id> [runs]
 
+#include "agtest_cap.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -36,7 +37,7 @@ int main(int argc, char** argv) {
         src = persistence::threads_dir() / (std::string{argv[1]} + ".jsonl");
     std::optional<Thread> loaded;
     if (src.extension() == ".jsonl") {
-        if (auto log = ThreadLog::open_path(src)) loaded = log->load_thread();
+        if (auto log = ThreadLog::open_path(src)) loaded = log->load_thread(agtest::cap());
     } else if (auto t = persistence::load_thread_file(::agentty::IoAccess::grant(), src)) {
         loaded = std::move(*t);
     }

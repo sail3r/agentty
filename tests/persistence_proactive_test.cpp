@@ -81,7 +81,7 @@ TEST_CASE("persistence proactive") {
     auto log_path = persistence::threads_dir() / (t.id.value + ".jsonl");
     check(fs::exists(log_path), "thread written to disk");
 
-    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     check(loaded.has_value(), "thread reloaded without error");
     if (!loaded) { REQUIRE(loaded.has_value()); return; }
 
@@ -177,7 +177,7 @@ TEST_CASE("persistence: a tool in flight does not fail log verification") {
 
     // And the turn still reloads intact, with the call made terminal so a
     // reload never waits on a tool whose process is gone.
-    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), t.id);
+    auto loaded = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), t.id);
     REQUIRE(loaded.has_value());
     REQUIRE(loaded->messages.size() == 2u);
     REQUIRE(loaded->messages[1].tool_calls.size() == 1u);

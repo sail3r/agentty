@@ -2846,9 +2846,9 @@ OneShotResult run_one_shot(const maya::unlocked& cap, const OneShotOptions& opts
             auto all = persistence::load_all_threads(io, cap);
             auto newest = std::max_element(all.begin(), all.end(),
                 [](const Thread& a, const Thread& b) { return a.updated_at < b.updated_at; });
-            if (newest != all.end()) got = persistence::load_thread_by_id(io, newest->id);
+            if (newest != all.end()) got = persistence::load_thread_by_id(io, cap, newest->id);
         } else {
-            got = persistence::load_thread_by_id(io, ThreadId{opts.resume});
+            got = persistence::load_thread_by_id(io, cap, ThreadId{opts.resume});
         }
         if (!got) {
             out.status = S::NotFound;

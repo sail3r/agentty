@@ -11,6 +11,7 @@
 // with the message index where the divergence starts.
 //   agentty_standalone_tests cache_churn_bench <thread.jsonl>
 
+#include "agtest_cap.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
@@ -27,7 +28,7 @@ int main(int argc, char** argv) {
     if (argc < 2) { std::printf("usage: cache_churn_bench <thread.jsonl>\n"); return 2; }
     auto log = ThreadLog::open_path(argv[1]);
     if (!log) { std::printf("could not open %s\n", argv[1]); return 1; }
-    const Thread full = log->load_thread();
+    const Thread full = log->load_thread(agtest::cap());
 
     std::string prev;
     std::size_t total_prev = 0, total_lost = 0, steps = 0, broke = 0;

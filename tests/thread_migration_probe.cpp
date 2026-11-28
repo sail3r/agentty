@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
     const auto legacy_size = fs::file_size(legacy, ec);
 
     // The thread as it exists today, via the legacy reader.
-    auto before = persistence::load_thread_by_id(::agentty::IoAccess::grant(), id);
+    auto before = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), id);
     if (!before) { std::printf("FAIL: could not load the staged thread\n"); return 1; }
 
     std::size_t tools = 0, images = 0;
@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
     }
 
     // Everything must survive, byte for byte.
-    auto after = persistence::load_thread_by_id(::agentty::IoAccess::grant(), id);
+    auto after = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), id);
     if (!after) { std::printf("FAIL: migrated thread does not load\n"); return 1; }
 
     check(after->id.value    == before->id.value,    "id survives");
@@ -139,7 +139,7 @@ int main(int argc, char** argv) {
     // A second save (i.e. the next turn) must be a no-op, not a corruption.
     persistence::save_thread(::agentty::IoAccess::grant(), agtest::cap(), *after);
     persistence::flush_pending_saves(::agentty::IoAccess::grant(), agtest::cap());
-    auto again = persistence::load_thread_by_id(::agentty::IoAccess::grant(), id);
+    auto again = persistence::load_thread_by_id(::agentty::IoAccess::grant(), agtest::cap(), id);
     check(again.has_value() && again->messages.size() == before->messages.size(),
           "a second save leaves the thread intact");
 

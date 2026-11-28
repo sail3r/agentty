@@ -711,12 +711,13 @@ target_include_directories(persistence_race_test_narrow PRIVATE include)
 # (the concurrency banlist forbids a raw std::mutex).
 target_include_directories(persistence_race_test_narrow PRIVATE
     $<TARGET_PROPERTY:maya::app,INTERFACE_INCLUDE_DIRECTORIES>)
-# maya::runtime for SharedFile's cross-process lock (platform file_lock).
-# maya::maya for exec::parallel_for (thread_log.cpp), defined in libmaya; the
-# race lane builds libmaya already for sandbox_config_race_test.
+# maya::runtime for SharedFile's cross-process lock (platform file_lock) and
+# thread_log.cpp's parallel parse (maya::parallel_for, jaal's: needs no
+# libmaya). Nothing from the view library: this target exists to keep the
+# TSan lane at ~11 TUs, and it runs the PARALLEL parse under TSan now.
 target_link_libraries(persistence_race_test_narrow PRIVATE
     nlohmann_json::nlohmann_json simdjson::simdjson Threads::Threads
-    maya::maya maya::runtime claybin)
+    maya::runtime claybin)
 target_compile_definitions(persistence_race_test_narrow PRIVATE
     AGENTTY_MCP=0)
 add_test(NAME persistence_race_test_narrow COMMAND persistence_race_test_narrow)
@@ -1243,6 +1244,12 @@ add_test(NAME no_ui_in_agentty
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lint/no_ui_in_agentty.py
                  ${CMAKE_SOURCE_DIR})
 set_tests_properties(no_ui_in_agentty PROPERTIES LABELS static TIMEOUT 60)
+# view_executor: maya::exec (the renderer's hook, inline outside maya::run,
+# no capability) only in the view layer; everything else maya::parallel_for.
+add_test(NAME view_executor
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lint/view_executor.py
+                 ${CMAKE_SOURCE_DIR})
+set_tests_properties(view_executor PROPERTIES LABELS static TIMEOUT 60)
 endif()
 # (ui_snapshots, which pins every screen byte-for-byte, is registered with
 # tool_gallery above; the all-panels case covers every overlay.)

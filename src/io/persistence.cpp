@@ -1574,11 +1574,11 @@ void reindex_thread(const lock_levels::below_file_lane& cap, const Thread& t) {
 
 } // namespace
 
-std::vector<Thread> backfill_picker_summaries(Io io, const lock_levels::below_file_lane& cap,
+std::vector<Thread> backfill_picker_summaries(Io io, const maya::unlocked& cap,
                                               const std::vector<ThreadId>& ids) {
     std::vector<Thread> out;
     for (const auto& id : ids) {
-        auto full = load_thread_by_id(io, id);
+        auto full = load_thread_by_id(io, cap, id);
         if (!full) continue;
         refresh_picker_summary(*full);
         // An empty thread stays at 0; nothing to show, nothing to retry.
@@ -1938,8 +1938,10 @@ static LogMismatch log_diff_range(const std::vector<Message>& got,
     return {};
 }
 
+// Runs inside the thread's lane (a held lock), so the read is serial: a
+// parallel parse blocks on helper threads, which needs `unlocked`.
 static LogMismatch log_diff(const ThreadLog& log, const std::vector<Message>& want) {
-    return log_diff_range(log.all(), want, 0);
+    return log_diff_range(log.all_serial(), want, 0);
 }
 
 // Returns true iff the thread is now on disk in the LOG format and that
@@ -2241,7 +2243,7 @@ static bool save_tail_sync(const SaveJob& job, std::size_t total) {
     // back the appended lines from the FILES, via a fresh open.
     auto check = ThreadLog::open_for_write(job.meta.id);
     if (!check) return false;
-    const auto got = check->range(job.from, check->size());
+    const auto got = check->range_serial(job.from, check->size());   // inside the lane
     const LogMismatch diff = log_diff_range(got, job.tail, job.from);
     if (!diff.ok()) {
         AGT_LOG(Persist, Error, "thread.save",
@@ -2327,7 +2329,7 @@ static bool write_job(const maya::held<lock_levels::thread_log>& cap, SaveJob& n
     // the tail left.
     if (auto log = ThreadLog::open_for_write(next.meta.id); log && log->size() >= next.from) {
         Thread t = next.meta;
-        t.messages = log->range(0, next.from);
+        t.messages = log->range_serial(0, next.from);   // inside the lane
         if (t.messages.size() == next.from) {
             for (const auto& m : next.tail) t.messages.push_back(m);
             if (save_thread_sync(cap, t)) return true;
@@ -2862,7 +2864,7 @@ LogStamp log_stamp(Io, const ThreadId& id) {
     return s;
 }
 
-std::optional<Thread> load_thread_by_id(Io io, const ThreadId& id) {
+std::optional<Thread> load_thread_by_id(Io io, const maya::unlocked& cap, const ThreadId& id) {
     if (id.value.empty()) return std::nullopt;
 
     // Prefer the log. A thread has one only after it has been saved since
@@ -2882,7 +2884,7 @@ std::optional<Thread> load_thread_by_id(Io io, const ThreadId& id) {
                     "empty log for id={} but a legacy document exists — "
                     "using the legacy document", id.value);
         } else {
-            Thread t = log->load_thread();
+            Thread t = log->load_thread(cap);
             // A log whose metadata sidecar was lost still knows its own id.
             if (t.id.value.empty()) t.id = id;
             AGT_LOG(Persist, Debug, "thread.load",
