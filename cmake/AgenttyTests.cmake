@@ -1453,3 +1453,41 @@ if(TARGET agentty)
                      -P ${CMAKE_SOURCE_DIR}/tests/lint/paste_page_sync.cmake)
     set_tests_properties(paste_page_sync PROPERTIES LABELS "static" TIMEOUT 30)
 endif()
+
+# ── Opt-in test binaries: Disabled until built, never "failed" ─────────────────────
+#
+# The sanitizer / race lanes and a few slow standalone tests are
+# EXCLUDE_FROM_ALL on purpose: a plain build stays fast, and CI builds them
+# by name. But ctest still listed each one as "Not Run", which it counts as
+# a FAILURE, so every local `ctest` ended with ~23 failures that meant
+# nothing and buried the one that did.
+#
+# This runs at ctest time (TEST_INCLUDE_FILES) and marks such a test
+# DISABLED when its binary is absent. Disabled is reported, not failed. Build
+# the target (`ninja race_harness_test`) and it runs as before. ctest reads
+# include files BEFORE the add_test() lines, so the file wraps add_test and
+# disables each opt-in test the moment it is defined.
+get_property(_agentty_all_tests DIRECTORY PROPERTY TESTS)
+set(_agentty_optin "")
+foreach(_t IN LISTS _agentty_all_tests)
+    if(TARGET ${_t})
+        get_target_property(_x ${_t} EXCLUDE_FROM_ALL)
+        get_target_property(_ty ${_t} TYPE)
+        if(_x AND _ty STREQUAL "EXECUTABLE")
+            string(APPEND _agentty_optin
+                "set(\"_agentty_exe_${_t}\" \"$<TARGET_FILE:${_t}>\")\n")
+        endif()
+    endif()
+endforeach()
+string(APPEND _agentty_optin [=[
+macro(add_test _agentty_name)
+  _add_test("${_agentty_name}" ${ARGN})
+  if(DEFINED "_agentty_exe_${_agentty_name}" AND NOT EXISTS "${_agentty_exe_${_agentty_name}}")
+    set_tests_properties("${_agentty_name}" PROPERTIES DISABLED TRUE)
+  endif()
+endmacro()
+]=])
+file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/agentty_optin_tests.cmake"
+     CONTENT "${_agentty_optin}")
+set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
+    "${CMAKE_BINARY_DIR}/agentty_optin_tests.cmake")
